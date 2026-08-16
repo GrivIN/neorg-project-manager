@@ -23,7 +23,8 @@ the same way a factory numbers every part in a machine:
 1.1. Stage 1
 1.1.1. X-Code Setup                     <- done
 1.1.2. Build Pipeline                    <- done
-1.1.3. Authentication
+
+1.1.3. Authentication Feature
 |  1.1.3.1. Stage 1 -- Login            <- in progress
 |  |  Login only, pre-created accounts. Prove auth flow works.
 |  |  1.1.3.1.1. Design                 <- done
@@ -32,7 +33,8 @@ the same way a factory numbers every part in a machine:
 |  |  1.1.3.1.4. QA                     <- blocked (waiting for Mobile)
 |  1.1.3.2. Stage 2 -- Registration     <- blocked (waiting for Stage 1)
 |     Self-service sign-up, email verification, password reset.
-1.1.4. Home Screen
+
+1.1.4. Home Screen Feature
 |  1.1.4.1. Stage 1 -- Basic greeting   <- blocked (waiting for Auth Stage 1)
 |     "Hello [name]!" after login. Validates end-to-end flow.
 |     Pre-requisites:
@@ -441,17 +443,7 @@ Using [lazy.nvim](https://github.com/folke/lazy.nvim):
 ```lua
 -- lua/plugins/neorg-project-manager.lua
 return {
-    "YOUR_USERNAME/neorg-project-manager",
-    ft = "norg",
-    opts = {},
-}
-```
-
-For local development (before publishing to GitHub):
-
-```lua
-return {
-    dir = "/path/to/neorg-project-manager",
+    "GrivIN/neorg-project-manager",
     ft = "norg",
     opts = {},
 }

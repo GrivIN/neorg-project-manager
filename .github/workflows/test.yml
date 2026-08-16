@@ -13,7 +13,7 @@ jobs:
       matrix:
         neovim-version: ['v0.10.0', 'stable', 'nightly']
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install Neovim
         uses: rhysd/action-setup-vim@v1

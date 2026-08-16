@@ -6,7 +6,7 @@ Thanks for considering contributing to neorg-project-manager!
 
 1. Clone the repo into your Neovim config or a separate directory:
    ```sh
-   git clone https://github.com/YOUR_USERNAME/neorg-project-manager.git
+   git clone https://github.com/GrivIN/neorg-project-manager.git
    ```
 
 2. Add it to your lazy.nvim config with `dir = "/path/to/neorg-project-manager"`
