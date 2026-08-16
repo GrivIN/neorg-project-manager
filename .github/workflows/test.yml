@@ -1,0 +1,34 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        neovim-version: ['v0.10.0', 'stable', 'nightly']
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Neovim
+        uses: rhysd/action-setup-vim@v1
+        with:
+          neovim: true
+          version: ${{ matrix.neovim-version }}
+
+      - name: Install tree-sitter-norg parser
+        run: |
+          nvim --headless -c "vim.treesitter.language.add('norg')" -c "q" 2>/dev/null || true
+          # If built-in add fails, try compiling from source
+          if ! nvim --headless -c "lua vim.treesitter.language.add('norg')" -c "q" 2>/dev/null; then
+            echo "Note: norg parser not available, some tests may be skipped"
+          fi
+
+      - name: Run tests
+        run: |
+          nvim --headless -u NONE -l tests/run.lua

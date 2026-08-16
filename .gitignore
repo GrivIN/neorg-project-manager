@@ -1,0 +1,6 @@
+*.swp
+*.swo
+*~
+.neorg_tmp
+tags
+.DS_Store
