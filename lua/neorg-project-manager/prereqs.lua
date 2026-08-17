@@ -166,6 +166,68 @@ local function find_prereq_links(heading_node, buf, prereq_pattern)
     return find_links_in_range(heading_node, buf, start_line, end_line)
 end
 
+--- Scan an external file for prerequisite links in its root heading.
+--- Reads the file from disk and finds {* number} links after the prereq pattern.
+--- Used when a managed heading in a status file links to an extracted file.
+---
+--- @param filepath string       Path to the target .norg file
+--- @param prereq_pattern string Lua pattern to match (e.g., "Pre%-requisites:")
+--- @return table[]              List of {text=string} (link numbers found)
+local function scan_file_for_prereqs(filepath, prereq_pattern)
+    local lines = vim.fn.readfile(filepath)
+    if #lines == 0 then
+        return {}
+    end
+
+    local in_prereq_section = false
+    local links = {}
+
+    -- Find the first heading, then scan for prereqs within its direct content
+    local first_heading_found = false
+    local first_heading_level = nil
+
+    for _, line in ipairs(lines) do
+        local stars = line:match("^(%*+)%s")
+
+        if stars then
+            if not first_heading_found then
+                -- This is the root heading
+                first_heading_found = true
+                first_heading_level = #stars
+            elseif #stars <= first_heading_level then
+                -- Next same-or-higher level heading — stop scanning
+                break
+            else
+                -- Child heading within the root section — stop prereq scanning
+                -- (prereqs belong to the root heading, before any children)
+                if in_prereq_section then
+                    break
+                end
+            end
+        elseif first_heading_found then
+            -- Non-heading line within the root heading's section
+            if not in_prereq_section then
+                if line:match(prereq_pattern) then
+                    in_prereq_section = true
+                end
+            else
+                -- In prereq section: extract links from list items
+                if line:match("^%s*%-") then
+                    -- List item — extract {* number} links
+                    for link_text in line:gmatch("{%*+%s+([^}]+)}") do
+                        table.insert(links, { text = vim.trim(link_text) })
+                    end
+                elseif not line:match("^%s*$") then
+                    -- Non-list, non-blank line — end of prereq section
+                    break
+                end
+            end
+        end
+    end
+
+    return links
+end
+
 --- Resolve a link text to a heading and check its todo state.
 --- Tries local index first, then project-wide index (cross-file).
 ---
@@ -220,6 +282,32 @@ function M.refresh(buf, ns, cfg, number_index, root)
             local state = helpers.get_todo_state(node)
             if state then
                 local prereq_links = find_prereq_links(node, buf, cfg.prereq_pattern)
+
+                -- Cross-file fallback: if no local prereqs, check linked file
+                if #prereq_links == 0 then
+                    local row = node:start()
+                    local line = vim.api.nvim_buf_get_lines(buf, row, row + 1, false)[1]
+                    if line then
+                        local link_num = helpers.extract_link_number_from_line(line)
+                        if link_num then
+                            -- Find the file for this link number
+                            local project_mod = require("neorg-project-manager.project")
+                            local buf_filepath = vim.api.nvim_buf_get_name(buf)
+                            local root_path = project_mod.find_root(buf_filepath)
+                            if root_path then
+                                local entries = project_mod.scan(root_path)
+                                for _, entry in ipairs(entries) do
+                                    if not entry.is_dir and entry.prefix == link_num then
+                                        prereq_links = scan_file_for_prereqs(
+                                            entry.filepath, cfg.prereq_pattern
+                                        )
+                                        break
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end
 
                 if #prereq_links > 0 then
                     local done = 0
