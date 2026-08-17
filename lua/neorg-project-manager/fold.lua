@@ -123,16 +123,16 @@ function M.toggle(buf)
     -- Check if current line is a heading (can be folded)
     local line = vim.api.nvim_buf_get_lines(buf, cursor_line - 1, cursor_line, false)[1]
     if line and line:match("^%*+%s") then
-        -- It's a heading line that is currently open — close it recursively
-        pcall(vim.cmd, "normal! zC")
+        -- It's a heading line that is currently open — close just this fold level
+        pcall(vim.cmd, "normal! zc")
         return
     end
 
     -- Not on a heading — try to find the fold we're inside and close it
     local fold_level = vim.fn.foldlevel(cursor_line)
     if fold_level > 0 then
-        -- Move to the fold start and close
-        pcall(vim.cmd, "normal! [zzC")
+        -- Move to the fold start and close just this level
+        pcall(vim.cmd, "normal! [zzc")
     else
         vim.notify("No foldable heading at cursor position.", vim.log.levels.INFO)
     end
