@@ -435,6 +435,8 @@ compare:
   in `project.norg` / `index.norg` with a single keystroke
 - **Extract to file** — move a heading's content into its own `.norg` file,
   keeping the heading as a navigation link
+- **Heading breadcrumb** — shows your current position in the project hierarchy
+  (statusline, winbar, or virtual text)
 
 ## Requirements
 
@@ -833,6 +835,55 @@ already exists on disk.
 - You want cross-file navigation (the `{* number}` link jumps to the file)
 - You need deeper nesting (a file gets 6 more heading levels on top of its prefix)
 
+### Heading breadcrumb
+
+Shows your current position in the project hierarchy as a breadcrumb path.
+Useful for orientation in large projects with many nested headings.
+
+**Statusline (default):** Add to your lualine config:
+
+```lua
+-- In your lualine setup:
+sections = {
+    lualine_c = {
+        { require("neorg-project-manager.breadcrumb").get,
+          cond = function() return vim.bo.filetype == "norg" end },
+    },
+}
+```
+
+Shows: `Encora Pulse Proxy > Python API > Authentication > Email OTP + PIN > Design`
+
+**Winbar:** Shows at the top of the window, always visible:
+
+```lua
+opts = { breadcrumb_display = "winbar" }
+```
+
+**Virtual text:** Shows at end of the current heading line:
+
+```lua
+opts = { breadcrumb_display = "virtual" }
+```
+
+**File-only mode** (no project/directory path — shorter breadcrumb):
+
+```lua
+opts = { breadcrumb_project_path = false }
+-- Shows: "Authentication > Email OTP + PIN > Design"
+-- Instead of: "Encora Pulse Proxy > Python API > Authentication > ..."
+```
+
+**Custom format:**
+
+```lua
+opts = {
+    breadcrumb_format = function(segments)
+        return table.concat(segments, " / ")
+    end,
+}
+```
+
 ## Commands
 
 | Command | Keybind | Description |
@@ -908,6 +959,12 @@ require("neorg-project-manager").setup({
 
     -- Rename settings
     rename_confirm_threshold = 5,
+
+    -- Breadcrumb / heading path
+    breadcrumb_display = "statusline",  -- "statusline", "winbar", "virtual", "none"
+    breadcrumb_separator = " > ",
+    breadcrumb_project_path = true,     -- false for file-only context
+    breadcrumb_format = nil,            -- custom function(segments) → string
 
     -- Keybinds
     default_keybinds = true,  -- false to disable all default mappings

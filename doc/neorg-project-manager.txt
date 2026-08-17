@@ -35,7 +35,8 @@ Features:
 - Project status tree in `project.norg` / `index.norg`
 - Project-wide file/directory renaming
 - Tree fold/toggle (body-only or full collapse in status files)
-- Extract to directory (split headings into separate files)
+- Extract to file (move heading content to its own .norg file)
+- Heading breadcrumb (statusline, winbar, or virtual text)
 
 ==============================================================================
 2. REQUIREMENTS                         *neorg-project-manager-requirements*
@@ -192,6 +193,12 @@ All options with defaults: >lua
 
         -- Rename
         rename_confirm_threshold = 5,
+
+        -- Breadcrumb / heading path
+        breadcrumb_display = "statusline",  -- "statusline", "winbar", "virtual", "none"
+        breadcrumb_separator = " > ",
+        breadcrumb_project_path = true,     -- false for file-only context
+        breadcrumb_format = nil,            -- custom function(segments) → string
     })
 <
 
@@ -361,9 +368,33 @@ fold module:
     `is_status_file(buf)`                   Check if buf is status file
 
 extract module:
-    `extract(buf)`                          Extract entry to directory
+    `extract(buf)`                          Extract entry to file
     `resolve_target_number(buf)`            Resolve number from cursor
     `locate_entry(number, root)`            Find entry in project
+
+breadcrumb module:                      *neorg-project-manager-breadcrumb*
+    `get()`                                 Get heading path string
+    `setup_winbar(buf)`                     Activate winbar display
+    `setup_virtual_text(buf, ns)`           Activate virtual text display
+
+    The `get()` function returns the current heading path as a string.
+    Results are cached per {buffer, cursor line, changedtick} — safe to
+    call on every statusline redraw.
+
+    Display modes:
+        "statusline"  User calls `get()` from lualine config (default)
+        "winbar"      Shown at top of window via vim.wo.winbar
+        "virtual"     Shown as virtual text on current heading line
+        "none"        Disabled (get() still works if called manually)
+
+    Lualine example: >lua
+        sections = {
+            lualine_c = {
+                { require("neorg-project-manager.breadcrumb").get,
+                  cond = function() return vim.bo.filetype == "norg" end },
+            },
+        }
+<
 
 ==============================================================================
 12. HEALTH CHECK                        *neorg-project-manager-health*

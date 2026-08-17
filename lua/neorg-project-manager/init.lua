@@ -27,6 +27,7 @@ local status = require("neorg-project-manager.status")
 local rename = require("neorg-project-manager.rename")
 local fold = require("neorg-project-manager.fold")
 local extract = require("neorg-project-manager.extract")
+local breadcrumb = require("neorg-project-manager.breadcrumb")
 
 --- Default configuration for the plugin.
 --- Users can override any of these in their lazy.nvim `opts` table.
@@ -175,6 +176,29 @@ M.defaults = {
     rename_confirm_threshold = 5,
 
     ---------------------------------------------------------------------------
+    --- BREADCRUMB / HEADING PATH
+    ---------------------------------------------------------------------------
+
+    --- Display mode for the heading breadcrumb path.
+    ---   "statusline" — export M.get() for use in lualine (no auto-setup)
+    ---   "winbar"     — show in vim.wo.winbar at top of window
+    ---   "virtual"    — show as virtual text on the current heading line
+    ---   "none"       — disabled (M.get() still works if called manually)
+    breadcrumb_display = "statusline",
+
+    --- Separator between path segments.
+    breadcrumb_separator = " > ",
+
+    --- Include full project path (directories + project root) in breadcrumb.
+    --- Set to false for file-only context (current file headings only).
+    breadcrumb_project_path = true,
+
+    --- Custom format function for breadcrumb display.
+    --- Receives a list of title strings, returns a formatted string.
+    --- @type nil|fun(segments: string[]): string
+    breadcrumb_format = nil,
+
+    ---------------------------------------------------------------------------
     --- KEYBINDINGS
     ---------------------------------------------------------------------------
 
@@ -194,6 +218,7 @@ M.config = {}
 M.ns = {
     prereqs = vim.api.nvim_create_namespace("neorg-pm/prereqs"),
     mixed = vim.api.nvim_create_namespace("neorg-pm/mixed"),
+    breadcrumb = vim.api.nvim_create_namespace("neorg-pm/breadcrumb"),
 }
 
 --- Per-buffer state tracking.
@@ -393,6 +418,15 @@ function M.attach(buf)
 
     -- Set up folds for all norg buffers (heading-based folding with body toggle)
     fold.setup_folds(buf)
+
+    -- Set up breadcrumb display
+    local bc_display = M.config.breadcrumb_display
+    if bc_display == "winbar" then
+        breadcrumb.setup_winbar(buf)
+    elseif bc_display == "virtual" then
+        breadcrumb.setup_virtual_text(buf, M.ns.breadcrumb)
+    end
+    -- "statusline" needs no setup — user calls breadcrumb.get() from lualine
 
     --- Check if auto-renumbering should run for this buffer.
     --- Only renumbers if the file is inside a project OR already has numbered headings.
