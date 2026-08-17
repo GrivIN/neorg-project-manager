@@ -154,6 +154,17 @@ function M.locate_entry(number, root)
         end
     end
 
+    -- Case 1b: number IS a directory prefix — already extracted
+    for _, entry in ipairs(entries) do
+        if entry.is_dir and entry.prefix == number then
+            return nil, string.format(
+                "Entry '%s' (%s/) is already a directory — nothing to extract.\n"
+                .. "Use :NeorgPMExtract on a file entry or a heading within a file.",
+                number, entry.title
+            )
+        end
+    end
+
     -- Case 2: number is a heading inside a file — use longest prefix match
     local resolved = project.resolve_number_to_file(number, entries)
     if not resolved then
