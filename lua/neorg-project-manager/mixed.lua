@@ -122,7 +122,32 @@ local function count_cross_file_children(buf, link_number)
     return done, total
 end
 
+--- Check if Neorg's todo-introspector module is active.
+--- When active, it already shows [done/total] (progress%) for local children,
+--- so we skip our local count to avoid duplication.
+---
+--- @return boolean  True if the introspector is handling local counts
+local function is_neorg_introspector_active()
+    local ok, neorg = pcall(require, "neorg")
+    if not ok or not neorg.modules then
+        return false
+    end
+    -- Check if the module is loaded (Neorg 8+ API)
+    if type(neorg.modules.is_module_loaded) == "function" then
+        return neorg.modules.is_module_loaded("core.todo-introspector")
+    end
+    -- Fallback: check if the loaded_modules table has it
+    if neorg.modules.loaded_modules then
+        return neorg.modules.loaded_modules["core.todo-introspector"] ~= nil
+    end
+    return false
+end
+
 --- Refresh mixed-type propagation virtual text for all headings in the buffer.
+---
+--- When Neorg's todo-introspector is active, only cross-file counts are shown
+--- (to avoid duplicating the introspector's local [done/total] display).
+--- When the introspector is not active, both local and cross-file counts are shown.
 ---
 --- @param buf number        Buffer handle
 --- @param ns number         Namespace ID for extmarks
@@ -134,14 +159,23 @@ function M.refresh(buf, ns, cfg, root)
         return
     end
 
+    local introspector_active = is_neorg_introspector_active()
+
     local function process_node(node)
         local level = helpers.get_heading_level(node)
         if level then
             local state = helpers.get_todo_state(node)
             if state then
-                local done, total = M.count_children_todos(node, level)
+                local done, total = 0, 0
+                local is_cross_file = false
+
+                -- Count local children (skip if introspector handles it)
+                if not introspector_active then
+                    done, total = M.count_children_todos(node, level)
+                end
 
                 -- Cross-file fallback: if no local children, check linked file
+                -- (always runs — introspector can't do cross-file)
                 if total == 0 then
                     local row = node:start()
                     local line = vim.api.nvim_buf_get_lines(buf, row, row + 1, false)[1]
@@ -149,11 +183,17 @@ function M.refresh(buf, ns, cfg, root)
                         local link_num = helpers.extract_link_number_from_line(line)
                         if link_num then
                             done, total = count_cross_file_children(buf, link_num)
+                            if total > 0 then
+                                is_cross_file = true
+                            end
                         end
                     end
                 end
 
-                if total > 0 then
+                -- Show virtual text:
+                -- - Always for cross-file counts (introspector can't see these)
+                -- - Only for local counts when introspector is NOT active
+                if total > 0 and (is_cross_file or not introspector_active) then
                     local row = node:start()
                     local text = cfg.mixed_format(done, total)
                     vim.api.nvim_buf_set_extmark(buf, ns, row, 0, {
