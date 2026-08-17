@@ -429,6 +429,10 @@ compare:
   overview of your entire project's state
 - **File renaming** — `:NeorgPMRenumberProject` (`<LocalLeader>pR`) renumbers files, directories,
   and all links when you restructure
+- **Tree fold/toggle** — collapse or expand a tree element and all its children
+  in `project.norg` / `index.norg` with a single keystroke
+- **Extract to directory** — split a file with multiple headings into a
+  directory with one file per heading, preserving all numbering
 
 ## Requirements
 
@@ -582,6 +586,8 @@ auto-update). Everything else is yours — never touched.
 | `<LocalLeader>pR` | Renumber entire project (files + dirs + links) |
 | `<LocalLeader>ps` | Update status in current `project.norg` / `index.norg` |
 | `<LocalLeader>pS` | Update all status files across the project |
+| `<LocalLeader>pt` | Toggle fold — collapse/expand heading with all children |
+| `<LocalLeader>pe` | Extract file headings into a directory structure |
 
 Disable defaults with `default_keybinds = false`. Change the prefix
 with `keybind_prefix = "n"` (becomes `<LocalLeader>nr`, etc.).
@@ -676,6 +682,82 @@ The plugin shows virtual text:
 - **`:NeorgPMStatus`** (`<LocalLeader>ps`): updates the current `project.norg` or `index.norg`
   buffer (surgical if content exists, full generation if empty)
 
+### Tree fold / toggle
+
+In `project.norg` or `index.norg`, the tree can get large. Use
+`:NeorgPMToggle` (`<LocalLeader>pt`) to collapse or expand any heading and all
+its children with a single keystroke:
+
+```norg
+* (-) my-cool-startup [0/2]          <- cursor here, press <LocalLeader>pt
+** (-) 1.1. Stage 1 {* 1.1} [2/3]   <- these lines get folded away
+*** (x) 1.1.1. X-Code Setup {* 1.1.1}
+*** (x) 1.1.2. Build Pipeline {* 1.1.2}
+*** (-) 1.1.3. Authentication {* 1.1.3} [1/2]
+** ( ) 1.2. Stage 2 {* 1.2}
+```
+
+After toggling, you see only:
+
+```
+* (-) my-cool-startup [0/2]  [+6 lines]
+```
+
+Press `<LocalLeader>pt` again to expand all children back.
+
+Folds are automatically set up for `project.norg` and `index.norg` buffers.
+They start fully expanded (all headings visible). The fold level is based on
+heading depth (number of `*` characters), so you can also use standard Neovim
+fold commands (`zM` to close all, `zR` to open all, `zo`/`zc` for
+individual levels).
+
+### Extract to directory
+
+When an entry has child headings that you want to split into separate files,
+use `:NeorgPMExtract` (`<LocalLeader>pe`). It extracts the selected entry and
+its sub-entries into a new directory — each child heading becomes its own file.
+
+**Example:** File `1.1.3. Authentication.norg` contains:
+
+```norg
+* (-) 1.1.3.1. Login Flow
+  ... login implementation details ...
+** (x) 1.1.3.1.1. Design
+** (-) 1.1.3.1.2. Backend
+* ( ) 1.1.3.2. OAuth Integration
+  ... oauth implementation details ...
+```
+
+With cursor on the `{* 1.1.3.1}` line in `project.norg`, run `:NeorgPMExtract`:
+
+```
+1.1.3.1. Login Flow/
+├── index.norg
+├── 1.1.3.1.1. Design.norg
+└── 1.1.3.1.2. Backend.norg
+```
+
+The section for `1.1.3.1` is removed from `1.1.3. Authentication.norg` (which
+still keeps `1.1.3.2. OAuth Integration`). If extracting the entry leaves the
+source file empty, the file is deleted.
+
+This also works at the file level: cursor on `{* 1.1.3}` extracts the entire
+file's contents (all its level-1 headings become files in a new
+`1.1.3. Authentication/` directory).
+
+**Usage:**
+1. Open `project.norg` or `index.norg`
+2. Place cursor on the heading line for the entry you want to extract
+   (e.g., `**** (-) 1.1.3.1. Login Flow {* 1.1.3.1}`)
+3. Run `:NeorgPMExtract` or press `<LocalLeader>pe`
+4. Confirm the operation (shows preview of files to create/modify)
+
+**When to use it:**
+- A section has grown too complex and needs its own files
+- You want to enable different people to work on different sub-entries
+- You need deeper nesting (a file is limited to 6 heading levels, but a
+  directory with sub-files has no depth limit)
+
 ## Commands
 
 | Command | Keybind | Description |
@@ -684,6 +766,8 @@ The plugin shows virtual text:
 | `:NeorgPMRenumberProject` | `<LocalLeader>pR` | Renumber all project files/dirs + all links |
 | `:NeorgPMStatus` | `<LocalLeader>ps` | Update status in current `project.norg` / `index.norg` |
 | `:NeorgPMStatusAll` | `<LocalLeader>pS` | Regenerate ALL status files across the project |
+| `:NeorgPMToggle` | `<LocalLeader>pt` | Toggle tree fold (collapse/expand heading with children) |
+| `:NeorgPMExtract` | `<LocalLeader>pe` | Extract file headings into a directory structure |
 | (automatic) | `<CR>` | Follow `{* number}` link (cross-file), falls back to Neorg hop |
 
 Default keybinds use `<LocalLeader>` + the `keybind_prefix` (default `"p"`).

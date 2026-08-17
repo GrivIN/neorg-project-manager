@@ -25,6 +25,8 @@ local project = require("neorg-project-manager.project")
 local idx = require("neorg-project-manager.index")
 local status = require("neorg-project-manager.status")
 local rename = require("neorg-project-manager.rename")
+local fold = require("neorg-project-manager.fold")
+local extract = require("neorg-project-manager.extract")
 
 --- Default configuration for the plugin.
 --- Users can override any of these in their lazy.nvim `opts` table.
@@ -304,6 +306,18 @@ function M.setup(opts)
             vim.notify("No project root found.", vim.log.levels.ERROR)
         end
     end, { desc = "Regenerate ALL index.norg + project.norg in the project" })
+
+    --- Toggle fold (collapse/expand) a tree element in project.norg/index.norg.
+    vim.api.nvim_create_user_command("NeorgPMToggle", function()
+        local buf = vim.api.nvim_get_current_buf()
+        fold.toggle(buf)
+    end, { desc = "Toggle tree element fold (collapse/expand heading with children)" })
+
+    --- Extract a .norg file into a directory with separate files per heading.
+    vim.api.nvim_create_user_command("NeorgPMExtract", function()
+        local buf = vim.api.nvim_get_current_buf()
+        extract.extract(buf)
+    end, { desc = "Extract file headings into a directory structure" })
 end
 
 --- Attach the plugin to a norg buffer.
@@ -350,10 +364,19 @@ function M.attach(buf)
             { buffer = buf, desc = "Update status" })
         vim.keymap.set("n", prefix .. "S", "<cmd>NeorgPMStatusAll<CR>",
             { buffer = buf, desc = "Update all status files" })
+        vim.keymap.set("n", prefix .. "t", "<cmd>NeorgPMToggle<CR>",
+            { buffer = buf, desc = "Toggle tree fold" })
+        vim.keymap.set("n", prefix .. "e", "<cmd>NeorgPMExtract<CR>",
+            { buffer = buf, desc = "Extract to directory" })
     end
 
     -- Fire User event for extensibility
     vim.api.nvim_exec_autocmds("User", { pattern = "NeorgPMAttach", data = { buf = buf } })
+
+    -- Set up folds for status files (project.norg / index.norg)
+    if fold.is_status_file(buf) then
+        fold.setup_folds(buf)
+    end
 
     --- Check if auto-renumbering should run for this buffer.
     --- Only renumbers if the file is inside a project OR already has numbered headings.
