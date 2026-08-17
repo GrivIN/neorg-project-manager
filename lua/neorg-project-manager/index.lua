@@ -248,13 +248,27 @@ function M.get(buf)
 
                 -- Fallback: search in status files (project.norg / index.norg)
                 -- Headings that only exist inside status files (not as standalone files)
+                local status_files_to_check = {}
                 local project_file = root .. "/project.norg"
                 if vim.fn.filereadable(project_file) == 1 then
-                    local headings = get_file_index(project_file, nil)
+                    table.insert(status_files_to_check, project_file)
+                end
+                -- Also check index.norg files in directories found by the scan
+                for _, entry in ipairs(entries) do
+                    if entry.is_dir then
+                        local idx_file = entry.filepath .. "/index.norg"
+                        if vim.fn.filereadable(idx_file) == 1 then
+                            table.insert(status_files_to_check, idx_file)
+                        end
+                    end
+                end
+
+                for _, status_file in ipairs(status_files_to_check) do
+                    local headings = get_file_index(status_file, nil)
                     local target_in_status = headings[number_key]
                     if target_in_status then
                         return {
-                            filepath = project_file,
+                            filepath = status_file,
                             line = target_in_status.line,
                             level = target_in_status.level,
                             state = target_in_status.state,
