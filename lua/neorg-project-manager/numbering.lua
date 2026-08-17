@@ -448,23 +448,27 @@ function M.renumber(buf)
 
     for _, h in ipairs(headings) do
         local anchored = false
+        local title_text = vim.treesitter.get_node_text(h.title_node, buf)
 
         -- Try to anchor level-1 headings in prefix-less files
         if can_anchor and h.level == 1 then
-            local title_text = vim.treesitter.get_node_text(h.title_node, buf)
             local existing_num, _, _ = M.parse_number_and_title(title_text)
             if existing_num then
-                -- Parse the root-level number back to a counter value
-                local styles = config.get("numbering_styles",
-                    { "numeric", "numeric", "numeric", "numeric", "numeric", "numeric" })
-                local style = styles[1] or "numeric"
-                local counter_val = M.reverse_counter(existing_num, style)
-                if counter_val then
-                    counters[1] = counter_val
-                    for i = 2, 6 do
-                        counters[i] = 0
+                -- Only anchor single-part numbers (reject "42.1" which belongs in a prefixed file)
+                local separator = config.get("number_separator", ".")
+                if not existing_num:find(separator, 1, true) then
+                    local styles = config.get("numbering_styles",
+                        { "numeric", "numeric", "numeric", "numeric", "numeric", "numeric" })
+                    local style = styles[1] or "numeric"
+                    local counter_val = M.reverse_counter(existing_num, style)
+                    -- Must be a positive integer (reject floats, negatives, zero)
+                    if counter_val and counter_val > 0 and counter_val == math.floor(counter_val) then
+                        counters[1] = counter_val
+                        for i = 2, 6 do
+                            counters[i] = 0
+                        end
+                        anchored = true
                     end
-                    anchored = true
                 end
             end
         end
@@ -478,7 +482,6 @@ function M.renumber(buf)
         end
 
         local correct_number = M.format_number(counters, h.level, prefix)
-        local title_text = vim.treesitter.get_node_text(h.title_node, buf)
         local new_title, old_number = compute_heading_update(title_text, correct_number, title_sep)
 
         if old_number and old_number ~= correct_number then

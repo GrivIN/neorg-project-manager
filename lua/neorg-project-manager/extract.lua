@@ -31,6 +31,24 @@ local idx = require("neorg-project-manager.index")
 local numbering = require("neorg-project-manager.numbering")
 
 ---------------------------------------------------------------------------
+--- FILESYSTEM UTILITIES
+---------------------------------------------------------------------------
+
+--- Sanitize a string for use as a filename/directory name.
+--- Replaces characters that are unsafe on common filesystems (/ \ : * ? " < > |)
+--- with underscores. Also trims trailing spaces and dots (Windows restriction).
+---
+--- @param name string  The raw name (e.g., a heading title)
+--- @return string      Sanitized name safe for use in file paths
+local function sanitize_filename(name)
+    -- Replace filesystem-unsafe characters with underscore
+    local sanitized = name:gsub('[/\\:*?"<>|]', "_")
+    -- Trim trailing spaces and dots (problematic on Windows)
+    sanitized = sanitized:gsub("[%.%s]+$", "")
+    return sanitized
+end
+
+---------------------------------------------------------------------------
 --- TARGET RESOLUTION
 ---------------------------------------------------------------------------
 
@@ -81,6 +99,7 @@ function M.resolve_target_number(buf)
     end
 
     -- From a content file: use the file's own prefix
+    -- (Defensive: index.norg is handled above as a status file, but guard anyway)
     if filename == "index.norg" then
         return nil, nil, "Cannot extract from index.norg"
     end
@@ -217,6 +236,7 @@ end
 --- @param location EntryLocation  The located entry info
 --- @return string[] preamble      Lines between entry heading and first child (body content)
 --- @return table[] children       List of {prefix, title, heading_line, lines, state_char}
+--- @return number child_level     The heading level of the children
 local function parse_children(lines, location)
     local preamble = {}
     local children = {}
@@ -291,27 +311,48 @@ local function parse_children(lines, location)
         table.insert(children, current_child)
     end
 
-    return preamble, children
+    return preamble, children, child_level
 end
 
 ---------------------------------------------------------------------------
 --- EXTRACTION EXECUTION
 ---------------------------------------------------------------------------
 
+--- Shift heading levels in a line by a given offset.
+--- E.g., "** heading" with shift=-1 becomes "* heading".
+---
+--- @param line string    A line of norg content
+--- @param shift number   Level shift (negative = reduce stars)
+--- @return string        The adjusted line
+local function shift_heading_level(line, shift)
+    local stars, rest = line:match("^(%*+)(%s.*)$")
+    if not stars then
+        return line
+    end
+    local new_level = #stars + shift
+    if new_level < 1 then
+        new_level = 1
+    end
+    return string.rep("*", new_level) .. rest
+end
+
 --- Build the file content for an extracted child.
 --- Includes the heading line and all body content.
+--- Adjusts heading levels so the child's heading becomes level 1.
 ---
---- @param child table  Child entry from parse_children()
---- @return string[]    Lines for the new file
-local function build_file_content(child)
+--- @param child table      Child entry from parse_children()
+--- @param child_level number  The original heading level of this child
+--- @return string[]        Lines for the new file
+local function build_file_content(child, child_level)
     local content = {}
+    local shift = 1 - child_level -- e.g., child at level 2 → shift = -1
 
-    -- Include the original heading line
-    table.insert(content, child.heading_line)
+    -- Include the heading line (shifted to level 1)
+    table.insert(content, shift_heading_level(child.heading_line, shift))
 
-    -- Include all body lines
+    -- Include all body lines (shift any sub-headings)
     for _, line in ipairs(child.lines) do
-        table.insert(content, line)
+        table.insert(content, shift_heading_level(line, shift))
     end
 
     -- Remove trailing empty lines
@@ -327,14 +368,15 @@ end
 --- @param location EntryLocation  The located entry
 --- @param preamble string[]       Preamble lines (content between entry heading and first child)
 --- @param children table[]        Parsed child entries
+--- @param child_level number      The heading level of the children (for level adjustment)
 --- @return boolean success
 --- @return string|nil error
-local function execute_extraction(location, preamble, children)
+local function execute_extraction(location, preamble, children, child_level)
     local title_sep = config.get("number_title_separator", ". ")
     local parent_dir = vim.fn.fnamemodify(location.filepath, ":p:h")
 
-    -- Directory name = entry's prefix + title separator + title
-    local dir_name = location.entry_number .. title_sep .. location.entry_title
+    -- Directory name = entry's prefix + title separator + title (sanitized)
+    local dir_name = location.entry_number .. title_sep .. sanitize_filename(location.entry_title)
     local dir_path = parent_dir .. "/" .. dir_name
 
     -- Check directory doesn't already exist
@@ -347,9 +389,9 @@ local function execute_extraction(location, preamble, children)
 
     -- Write each child as a separate file
     for _, child in ipairs(children) do
-        local file_name = child.prefix .. title_sep .. child.title .. ".norg"
+        local file_name = child.prefix .. title_sep .. sanitize_filename(child.title) .. ".norg"
         local file_path = dir_path .. "/" .. file_name
-        local content = build_file_content(child)
+        local content = build_file_content(child, child_level)
         vim.fn.writefile(content, file_path)
     end
 
@@ -489,7 +531,7 @@ function M.extract(buf)
         return
     end
 
-    local preamble, children = parse_children(lines, location)
+    local preamble, children, child_level = parse_children(lines, location)
 
     if #children == 0 then
         vim.notify(
@@ -504,13 +546,13 @@ function M.extract(buf)
 
     -- Build confirmation message
     local title_sep = config.get("number_title_separator", ". ")
-    local dir_name = location.entry_number .. title_sep .. location.entry_title
+    local dir_name = location.entry_number .. title_sep .. sanitize_filename(location.entry_title)
     local source_name = vim.fn.fnamemodify(location.filepath, ":t")
 
     local preview = { string.format('Extract "%s. %s" → directory:', location.entry_number, location.entry_title) }
     table.insert(preview, string.format("  Create: %s/", dir_name))
     for _, child in ipairs(children) do
-        local fname = child.prefix .. title_sep .. child.title .. ".norg"
+        local fname = child.prefix .. title_sep .. sanitize_filename(child.title) .. ".norg"
         table.insert(preview, string.format("  Create: %s/%s", dir_name, fname))
     end
     table.insert(preview, string.format("  Create: %s/index.norg", dir_name))
@@ -530,7 +572,7 @@ function M.extract(buf)
         ),
     }, function(choice)
         if choice == "Yes" then
-            local ok, extract_err = execute_extraction(location, preamble, children)
+            local ok, extract_err = execute_extraction(location, preamble, children, child_level)
             if ok then
                 vim.notify(
                     string.format(
