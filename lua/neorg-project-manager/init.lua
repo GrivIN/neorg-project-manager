@@ -559,17 +559,21 @@ function M.auto_update_parent_index(filepath)
     end
 
     local dir_path = vim.fn.fnamemodify(filepath, ":p:h")
-    local index_path = dir_path .. "/index.norg"
 
-    -- Create or surgically update index.norg
-    if vim.fn.filereadable(index_path) == 0 then
-        -- Create new index.norg with full generation (direct children only)
-        local dir_tree = status.build_directory_tree(dir_path)
-        local idx_lines = status.render_as_norg(dir_tree, { max_depth = 2, base_level = 0 })
-        vim.fn.writefile(idx_lines, index_path)
-    else
-        -- Surgical update: only touch managed headings
-        status.update_file(index_path, dir_path, "index")
+    -- Don't create/update index.norg in the project root — project.norg handles it
+    if dir_path ~= root then
+        local index_path = dir_path .. "/index.norg"
+
+        -- Create or surgically update index.norg
+        if vim.fn.filereadable(index_path) == 0 then
+            -- Create new index.norg with full generation (direct children only)
+            local dir_tree = status.build_directory_tree(dir_path)
+            local idx_lines = status.render_as_norg(dir_tree, { max_depth = 2, base_level = 0 })
+            vim.fn.writefile(idx_lines, index_path)
+        else
+            -- Surgical update: only touch managed headings
+            status.update_file(index_path, dir_path, "index")
+        end
     end
 
     -- Same for project.norg at the root
