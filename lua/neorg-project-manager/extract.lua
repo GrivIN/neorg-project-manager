@@ -127,6 +127,102 @@ end
 --- @field end_line number       1-indexed line where the entry ends (exclusive)
 --- @field is_file_level boolean True if entry_number == file_prefix (entry IS the whole file)
 
+--- Search for a heading with a specific number inside a file.
+--- Returns an EntryLocation if found, nil otherwise.
+---
+--- @param filepath string       Path to the file to search
+--- @param file_prefix string|nil The file's own prefix (nil for status files)
+--- @param number string         The heading number to find
+--- @return EntryLocation|nil    Location info
+--- @return string|nil           Error message
+function M._find_heading_in_file(filepath, file_prefix, number)
+    local lines = vim.fn.readfile(filepath)
+    if #lines == 0 then
+        return nil, nil
+    end
+
+    local target_level = nil
+    local target_title = nil
+    local target_start = nil
+    local target_end = nil
+
+    for i, line in ipairs(lines) do
+        local stars = line:match("^(%*+)%s")
+        if stars then
+            local heading_text = line:match("^%*+%s+(.*)$")
+            local content = heading_text
+
+            -- Strip todo state
+            local _, rest = heading_text:match("^%((.-)%)%s+(.*)")
+            if rest then
+                content = rest
+            end
+
+            local num, title, _ = numbering.parse_number_and_title(content)
+
+            -- Also check if the number is in a {* number} link on this line
+            if not num or num ~= number then
+                local link_num = helpers.extract_link_number_from_line(line)
+                if link_num == number and num then
+                    -- The link matches and heading has a parsed number — use it
+                elseif link_num == number and not num then
+                    -- Link matches but no number prefix in title — use content as title
+                    title = content
+                    num = link_num
+                else
+                    -- No match — check if this is end of section
+                    if target_start and #stars <= target_level then
+                        target_end = i
+                        break
+                    end
+                    goto continue
+                end
+            end
+
+            -- Clean link syntax and progress counts from the title
+            if title then
+                title = title:gsub("%s*{%*+%s+[^}]+}%s*", "")  -- strip {* number}
+                title = title:gsub("%s*%[%d+/%d+%]%s*$", "")    -- strip [N/M]
+                title = vim.trim(title)
+            end
+
+            if num == number then
+                if target_start then
+                    -- Already found — this must be the end marker
+                    target_end = i
+                    break
+                end
+                target_level = #stars
+                target_title = title
+                target_start = i
+            elseif target_start and #stars <= target_level then
+                target_end = i
+                break
+            end
+        end
+        ::continue::
+    end
+
+    if not target_start then
+        return nil, nil
+    end
+
+    if not target_end then
+        target_end = #lines + 1
+    end
+
+    return {
+        filepath = filepath,
+        file_prefix = file_prefix,
+        entry_number = number,
+        entry_title = target_title,
+        heading_level = target_level,
+        start_line = target_start,
+        end_line = target_end,
+        is_file_level = false,
+    }, nil
+end
+
 --- Locate an entry within the project: find which file contains it and where.
 ---
 --- @param number string          The entry number to find (e.g., "1.1.3.1")
@@ -165,75 +261,52 @@ function M.locate_entry(number, root)
         end
     end
 
-    -- Case 2: number is a heading inside a file — use longest prefix match
+    -- Case 2: number is a heading inside a content file — use longest prefix match
     local resolved = project.resolve_number_to_file(number, entries)
-    if not resolved then
-        return nil, string.format("Cannot resolve '%s' to any file in the project", number)
+    if resolved then
+        -- Verify it's a file
+        local stat = vim.uv.fs_stat(resolved.filepath)
+        if not stat or stat.type ~= "file" then
+            return nil, string.format("'%s' resolves to a directory, not a file", number)
+        end
+
+        local found, err = M._find_heading_in_file(resolved.filepath, resolved.prefix, number)
+        if found then return found, nil end
+        if err then return nil, err end
     end
 
-    -- Verify it's a file
-    local stat = vim.uv.fs_stat(resolved.filepath)
-    if not stat or stat.type ~= "file" then
-        return nil, string.format("'%s' resolves to a directory, not a file", number)
+    -- Case 3: number is a heading inside a status file (project.norg / index.norg)
+    -- This handles the case where entries only exist as headings in project.norg,
+    -- with no corresponding files/directories on disk yet.
+    local status_files = {}
+    local project_file = root .. "/project.norg"
+    if vim.fn.filereadable(project_file) == 1 then
+        table.insert(status_files, project_file)
     end
-
-    -- Parse the file to find the heading
-    local lines = vim.fn.readfile(resolved.filepath)
-    local title_sep = config.get("number_title_separator", ". ")
-
-    -- Find the heading line for this number
-    local target_level = nil
-    local target_title = nil
-    local target_start = nil
-    local target_end = nil
-
-    for i, line in ipairs(lines) do
-        local stars = line:match("^(%*+)%s")
-        if stars then
-            -- Parse heading to get its number
-            local heading_text = line:match("^%*+%s+(.*)$")
-            local content = heading_text
-
-            -- Strip todo state
-            local _, rest = heading_text:match("^%((.-)%)%s+(.*)")
-            if rest then
-                content = rest
-            end
-
-            local num, title, _ = numbering.parse_number_and_title(content)
-
-            if num == number then
-                -- Found the target heading
-                target_level = #stars
-                target_title = title
-                target_start = i
-            elseif target_start and #stars <= target_level then
-                -- Found next same-or-higher-level heading — marks end of our section
-                target_end = i
-                break
+    -- Also check index.norg files in subdirectories
+    local function find_index_files(dir)
+        local idx_file = dir .. "/index.norg"
+        if vim.fn.filereadable(idx_file) == 1 then
+            table.insert(status_files, idx_file)
+        end
+        local handle = vim.uv.fs_scandir(dir)
+        if not handle then return end
+        while true do
+            local name, entry_type = vim.uv.fs_scandir_next(handle)
+            if not name then break end
+            if entry_type == "directory" and name:sub(1, 1) ~= "." then
+                find_index_files(dir .. "/" .. name)
             end
         end
     end
+    find_index_files(root)
 
-    if not target_start then
-        return nil, string.format("Heading '%s' not found in file '%s'", number, resolved.filepath)
+    for _, status_filepath in ipairs(status_files) do
+        local found, _ = M._find_heading_in_file(status_filepath, nil, number)
+        if found then return found, nil end
     end
 
-    -- If we didn't find an end marker, section goes to end of file
-    if not target_end then
-        target_end = #lines + 1
-    end
-
-    return {
-        filepath = resolved.filepath,
-        file_prefix = resolved.prefix,
-        entry_number = number,
-        entry_title = target_title,
-        heading_level = target_level,
-        start_line = target_start,
-        end_line = target_end,
-        is_file_level = false,
-    }, nil
+    return nil, string.format("Cannot resolve '%s' to any file or heading in the project", number)
 end
 
 ---------------------------------------------------------------------------
