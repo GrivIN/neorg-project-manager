@@ -101,15 +101,18 @@ Call setup explicitly if not using lazy.nvim's `opts`: >lua
 
                                         *:NeorgPMExtract*
 :NeorgPMExtract
-    Extract an entry and its sub-entries into a new directory structure.
-    Place cursor on a heading with a `{* number}` link in `project.norg`
-    or `index.norg`. The entry's child headings become separate files in
-    a new directory. The entry section is removed from the source file
-    (or the file is deleted if empty). Shows a confirmation prompt.
+    Extract a heading's content into its own .norg file. Place cursor on
+    a heading with a `{* number}` link in `project.norg` or `index.norg`.
+    The content below the heading moves to a new file (with heading levels
+    shifted to start at `*`). The heading line stays in place as a
+    navigation link. Numbering is preserved. Shows a confirmation prompt.
 
-    Example: cursor on `{* 1.1.3.1}` which has sub-headings 1.1.3.1.1
-    and 1.1.3.1.2 → creates directory `1.1.3.1. Login Flow/` with one
-    file per sub-heading.
+    Aborts if the entry is already a standalone file or if the target
+    file already exists on disk.
+
+    Example: cursor on `*** (-) 1.1.1. Auth {* 1.1.1}` with `****`
+    children below → creates `1.1.1. Auth.norg` with those children
+    shifted to `*` level.
 
 ==============================================================================
 5. KEYBINDS                             *neorg-project-manager-keybinds*

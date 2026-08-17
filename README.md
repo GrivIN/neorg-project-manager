@@ -433,8 +433,8 @@ compare:
   and all links when you restructure
 - **Tree fold/toggle** — collapse or expand a tree element and all its children
   in `project.norg` / `index.norg` with a single keystroke
-- **Extract to directory** — split a file with multiple headings into a
-  directory with one file per heading, preserving all numbering
+- **Extract to file** — move a heading's content into its own `.norg` file,
+  keeping the heading as a navigation link
 
 ## Requirements
 
@@ -637,7 +637,7 @@ auto-update). Everything else is yours — never touched.
 | `<LocalLeader>pS` | Update all status files across the project |
 | `<LocalLeader>pt` | Toggle body folds — hide descriptions, keep all headings visible |
 | `<LocalLeader>pT` | Toggle full fold — collapse heading with all children |
-| `<LocalLeader>pe` | Extract entry into a directory structure |
+| `<LocalLeader>pe` | Extract heading content into its own file |
 
 Disable defaults with `default_keybinds = false`. Change the prefix
 with `keybind_prefix = "n"` (becomes `<LocalLeader>nr`, etc.).
@@ -778,52 +778,60 @@ They start fully expanded (all headings visible). You can also use standard
 Neovim fold commands (`zM` to close all, `zR` to open all, `zo`/`zc` for
 individual levels).
 
-### Extract to directory
+### Extract to file
 
-When an entry has child headings that you want to split into separate files,
-use `:NeorgPMExtract` (`<LocalLeader>pe`). It extracts the selected entry and
-its sub-entries into a new directory — each child heading becomes its own file.
+When a heading in `project.norg` has grown large with child content, use
+`:NeorgPMExtract` (`<LocalLeader>pe`) to extract it into its own `.norg` file.
+The heading line stays in place (its `{* number}` link now navigates to the
+new file), and all content below it moves to the new file.
 
-**Example:** File `1.1.3. Authentication.norg` contains:
+**Before** — `project.norg`:
 
 ```norg
-* (-) 1.1.3.1. Login Flow
-  ... login implementation details ...
-** (x) 1.1.3.1.1. Design
-** (-) 1.1.3.1.2. Backend
-* ( ) 1.1.3.2. OAuth Integration
-  ... oauth implementation details ...
+*** (-) 1.1.1. Authentication {* 1.1.1}
+**** (-) 1.1.1.1. v0.0.1 — Email OTP + PIN {* 1.1.1.1}
+***** (x) 1.1.1.1.1. Design {* 1.1.1.1.1}
+      User stories:
+      - As a developer...
+**** (-) 1.1.1.2. v0.0.1 — Phone + SMS OTP {* 1.1.1.2}
+      ...
+*** (x) 1.1.2. User Management ...
 ```
 
-With cursor on the `{* 1.1.3.1}` line in `project.norg`, run `:NeorgPMExtract`:
+**After** — cursor on `{* 1.1.1}`, run `:NeorgPMExtract`:
 
+`project.norg` keeps only the heading:
+```norg
+*** (-) 1.1.1. Authentication {* 1.1.1}
+*** (x) 1.1.2. User Management ...
 ```
-1.1.3.1. Login Flow/
-├── index.norg
-├── 1.1.3.1.1. Design.norg
-└── 1.1.3.1.2. Backend.norg
+
+New file `1.1.1. Authentication.norg` (heading levels shifted to start at `*`):
+```norg
+* (-) 1.1.1.1. v0.0.1 — Email OTP + PIN {* 1.1.1.1}
+** (x) 1.1.1.1.1. Design {* 1.1.1.1.1}
+      User stories:
+      - As a developer...
+* (-) 1.1.1.2. v0.0.1 — Phone + SMS OTP {* 1.1.1.2}
+      ...
 ```
 
-The section for `1.1.3.1` is removed from `1.1.3. Authentication.norg` (which
-still keeps `1.1.3.2. OAuth Integration`). If extracting the entry leaves the
-source file empty, the file is deleted.
-
-This also works at the file level: cursor on `{* 1.1.3}` extracts the entire
-file's contents (all its level-1 headings become files in a new
-`1.1.3. Authentication/` directory).
+Numbering stays untouched — only the `*` depth is shifted. Non-heading
+lines (body text, lists) are copied verbatim.
 
 **Usage:**
 1. Open `project.norg` or `index.norg`
-2. Place cursor on the heading line for the entry you want to extract
-   (e.g., `**** (-) 1.1.3.1. Login Flow {* 1.1.3.1}`)
+2. Place cursor on the heading you want to extract
 3. Run `:NeorgPMExtract` or press `<LocalLeader>pe`
-4. Confirm the operation (shows preview of files to create/modify)
+4. Confirm
+
+**Aborts if** the entry is already a standalone file or if the target file
+already exists on disk.
 
 **When to use it:**
-- A section has grown too complex and needs its own files
-- You want to enable different people to work on different sub-entries
-- You need deeper nesting (a file is limited to 6 heading levels, but a
-  directory with sub-files has no depth limit)
+- A section has grown too complex — give it its own file
+- You want cross-file navigation (the `{* number}` link jumps to the file)
+- You need deeper nesting (a file gets 6 more heading levels on top of its prefix)
 
 ## Commands
 
@@ -835,7 +843,7 @@ file's contents (all its level-1 headings become files in a new
 | `:NeorgPMStatusAll` | `<LocalLeader>pS` | Regenerate ALL status files across the project |
 | `:NeorgPMToggle` | `<LocalLeader>pt` | Toggle body folds (hide descriptions, keep headings visible) |
 | `:NeorgPMToggleAll` | `<LocalLeader>pT` | Toggle full fold (collapse heading with all children) |
-| `:NeorgPMExtract` | `<LocalLeader>pe` | Extract entry into a directory structure |
+| `:NeorgPMExtract` | `<LocalLeader>pe` | Extract heading content into its own file |
 | (automatic) | `<CR>` | Follow `{* number}` link (cross-file), falls back to Neorg hop |
 
 Default keybinds use `<LocalLeader>` + the `keybind_prefix` (default `"p"`).

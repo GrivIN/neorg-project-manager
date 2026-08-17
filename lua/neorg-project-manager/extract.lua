@@ -1,23 +1,19 @@
---- neorg-project-manager.extract: Extract an entry and its sub-entries into a directory.
+--- neorg-project-manager.extract: Extract a heading's content into its own file.
 ---
---- Takes a specific numbered entry (e.g., "1.1.3.1" which is a heading inside
---- "1.1.3. Authentication.norg") and extracts it with its children into a new
---- directory structure:
+--- Takes a heading in project.norg/index.norg (or any .norg file) and extracts
+--- its children into a standalone .norg file. The heading line stays in place
+--- (with its {* number} link for navigation), and the content below it moves
+--- to the new file with heading levels shifted to start from *.
 ---
----   Before: 1.1.3. Authentication.norg contains headings 1.1.3.1, 1.1.3.2
----   Extract entry 1.1.3.1 (which has sub-headings 1.1.3.1.1, 1.1.3.1.2):
+--- Example:
+---   project.norg has: *** (-) 1.1.1. Auth {* 1.1.1}
+---                     **** (-) 1.1.1.1. Login {* 1.1.1.1}
+---                     ***** (x) 1.1.1.1.1. Design
 ---
----   After:  1.1.3. Authentication.norg  (still has 1.1.3.2, but 1.1.3.1 removed)
----           1.1.3.1. Login Flow/
----             ├── index.norg
----             ├── 1.1.3.1.1. Design.norg
----             └── 1.1.3.1.2. Backend.norg
----
---- If extracting an entry whose number IS the file prefix (i.e., the entire file),
---- the whole file becomes a directory and the original file is removed.
----
---- Triggered from cursor position in project.norg/index.norg (reads the {* number}
---- link to identify the target entry).
+---   After extract: project.norg keeps the heading line only.
+---   New file "1.1.1. Auth.norg" gets the children (stars shifted by 3):
+---                     * (-) 1.1.1.1. Login {* 1.1.1.1}
+---                     ** (x) 1.1.1.1.1. Design
 ---
 --- @module neorg-project-manager.extract
 
@@ -34,7 +30,7 @@ local numbering = require("neorg-project-manager.numbering")
 --- FILESYSTEM UTILITIES
 ---------------------------------------------------------------------------
 
---- Sanitize a string for use as a filename/directory name.
+--- Sanitize a string for use as a filename.
 --- Strips norg-specific syntax (links, progress counts, brackets) and replaces
 --- filesystem-unsafe characters. Trims trailing spaces and dots.
 ---
@@ -51,7 +47,7 @@ local function sanitize_filename(name)
     sanitized = sanitized:gsub("[{}%[%]]", "")
     -- Replace filesystem-unsafe characters with underscore
     sanitized = sanitized:gsub('[/\\:*?"<>|]', "_")
-    -- Collapse multiple spaces/underscores into one
+    -- Collapse multiple spaces/underscores into one space
     sanitized = sanitized:gsub("[%s_]+", " ")
     -- Trim leading/trailing whitespace
     sanitized = vim.trim(sanitized)
@@ -131,7 +127,7 @@ end
 --- Information about a located entry within a file.
 --- @class EntryLocation
 --- @field filepath string       Path to the file containing this entry
---- @field file_prefix string    The file's own prefix
+--- @field file_prefix string|nil The file's own prefix
 --- @field entry_number string   The full number of the entry
 --- @field entry_title string    The title of the entry heading
 --- @field heading_level number  The heading level (number of *)
@@ -193,14 +189,14 @@ function M._find_heading_in_file(filepath, file_prefix, number)
 
             -- Clean link syntax and progress counts from the title
             if title then
-                title = title:gsub("%s*{%*+%s+[^}]+}%s*", "")  -- strip {* number}
-                title = title:gsub("%s*%[%d+/%d+%]%s*$", "")    -- strip [N/M]
+                title = title:gsub("%s*{%*+%s+[^}]+}%s*", "")
+                title = title:gsub("%s*%[%d+/%d+%]%s*$", "")
                 title = vim.trim(title)
             end
 
             if num == number then
                 if target_start then
-                    -- Already found — this must be the end marker
+                    -- Already found — this is the end marker (same number shouldn't repeat)
                     target_end = i
                     break
                 end
@@ -243,9 +239,8 @@ end
 --- @return string|nil            Error message
 function M.locate_entry(number, root)
     local entries = project.scan(root)
-    local sep = config.get("number_separator", ".")
 
-    -- Case 1: number IS a file prefix (entry = entire file)
+    -- Case 1: number IS a file prefix (entry = entire file, already extracted)
     for _, entry in ipairs(entries) do
         if not entry.is_dir and entry.prefix == number then
             local lines = vim.fn.readfile(entry.filepath)
@@ -254,7 +249,7 @@ function M.locate_entry(number, root)
                 file_prefix = entry.prefix,
                 entry_number = number,
                 entry_title = entry.title,
-                heading_level = nil, -- entire file
+                heading_level = nil,
                 start_line = 1,
                 end_line = #lines + 1,
                 is_file_level = true,
@@ -266,8 +261,7 @@ function M.locate_entry(number, root)
     for _, entry in ipairs(entries) do
         if entry.is_dir and entry.prefix == number then
             return nil, string.format(
-                "Entry '%s' (%s/) is already a directory — nothing to extract.\n"
-                .. "Use :NeorgPMExtract on a file entry or a heading within a file.",
+                "Entry '%s' (%s/) is already a directory — nothing to extract.",
                 number, entry.title
             )
         end
@@ -276,26 +270,21 @@ function M.locate_entry(number, root)
     -- Case 2: number is a heading inside a content file — use longest prefix match
     local resolved = project.resolve_number_to_file(number, entries)
     if resolved then
-        -- Verify it's a file
         local stat = vim.uv.fs_stat(resolved.filepath)
-        if not stat or stat.type ~= "file" then
-            return nil, string.format("'%s' resolves to a directory, not a file", number)
+        if stat and stat.type == "file" then
+            local found, err = M._find_heading_in_file(resolved.filepath, resolved.prefix, number)
+            if found then return found, nil end
+            if err then return nil, err end
         end
-
-        local found, err = M._find_heading_in_file(resolved.filepath, resolved.prefix, number)
-        if found then return found, nil end
-        if err then return nil, err end
     end
 
     -- Case 3: number is a heading inside a status file (project.norg / index.norg)
-    -- This handles the case where entries only exist as headings in project.norg,
-    -- with no corresponding files/directories on disk yet.
     local status_files = {}
     local project_file = root .. "/project.norg"
     if vim.fn.filereadable(project_file) == 1 then
         table.insert(status_files, project_file)
     end
-    -- Also check index.norg files in subdirectories
+
     local function find_index_files(dir)
         local idx_file = dir .. "/index.norg"
         if vim.fn.filereadable(idx_file) == 1 then
@@ -322,272 +311,77 @@ function M.locate_entry(number, root)
 end
 
 ---------------------------------------------------------------------------
---- SECTION PARSING (within an entry's line range)
+--- EXTRACTION
 ---------------------------------------------------------------------------
 
---- Parse an entry's section into child sub-entries.
---- Children are headings one level deeper than the entry itself.
+--- Execute the extraction: create file, remove content from source.
 ---
---- @param lines string[]          All lines of the source file
---- @param location EntryLocation  The located entry info
---- @return string[] preamble      Lines between entry heading and first child (body content)
---- @return table[] children       List of {prefix, title, heading_line, lines, state_char}
---- @return number child_level     The heading level of the children
-local function parse_children(lines, location)
-    local preamble = {}
-    local children = {}
-    local current_child = nil
-
-    -- Determine the child heading level
-    local child_level
-    if location.is_file_level then
-        -- For file-level entries, children are level-1 headings
-        child_level = 1
-    else
-        child_level = location.heading_level + 1
-    end
-
-    -- Starting line: skip the entry's own heading line (if not file-level)
-    local scan_start = location.start_line
-    if not location.is_file_level then
-        scan_start = location.start_line + 1
-    end
-
+--- @param location EntryLocation  The located entry
+--- @return boolean success
+--- @return string|nil error
+local function execute_extraction(location)
     local title_sep = config.get("number_title_separator", ". ")
+    local parent_dir = vim.fn.fnamemodify(location.filepath, ":p:h")
 
-    for i = scan_start, location.end_line - 1 do
-        local line = lines[i]
-        local stars = line:match("^(%*+)%s")
+    -- Build target filename
+    local file_name = location.entry_number .. title_sep
+        .. sanitize_filename(location.entry_title) .. ".norg"
+    local file_path = parent_dir .. "/" .. file_name
 
-        if stars and #stars == child_level then
-            -- Save previous child
-            if current_child then
-                table.insert(children, current_child)
-            end
-
-            -- Parse the child heading
-            local heading_text = line:match("^%*+%s+(.*)$")
-            local state_char = nil
-            local content = heading_text
-
-            -- Strip todo state
-            local state, rest = heading_text:match("^%((.-)%)%s+(.*)")
-            if state then
-                state_char = state
-                content = rest
-            end
-
-            local num, title, _ = numbering.parse_number_and_title(content)
-
-            -- If no number parsed, generate one
-            if not num then
-                title = content
-                local child_pos = #children + 1
-                num = location.entry_number .. config.get("number_separator", ".") .. tostring(child_pos)
-            end
-
-            current_child = {
-                prefix = num,
-                title = title,
-                heading_line = line,
-                lines = {},
-                state_char = state_char,
-            }
-        else
-            if current_child then
-                table.insert(current_child.lines, line)
-            else
-                table.insert(preamble, line)
-            end
-        end
+    -- Abort if target file already exists
+    if vim.uv.fs_stat(file_path) then
+        return false, string.format("File already exists: %s", file_name)
     end
 
-    -- Don't forget the last child
-    if current_child then
-        table.insert(children, current_child)
-    end
+    -- Read source file
+    local source_lines = vim.fn.readfile(location.filepath)
 
-    return preamble, children, child_level
-end
-
----------------------------------------------------------------------------
---- EXTRACTION EXECUTION
----------------------------------------------------------------------------
-
---- Shift heading levels in a line by a given offset.
---- E.g., "** heading" with shift=-1 becomes "* heading".
----
---- @param line string    A line of norg content
---- @param shift number   Level shift (negative = reduce stars)
---- @return string        The adjusted line
-local function shift_heading_level(line, shift)
-    local stars, rest = line:match("^(%*+)(%s.*)$")
-    if not stars then
-        return line
-    end
-    local new_level = #stars + shift
-    if new_level < 1 then
-        new_level = 1
-    end
-    return string.rep("*", new_level) .. rest
-end
-
---- Build the file content for an extracted child.
---- Includes the heading line and all body content.
---- Adjusts heading levels so the child's heading becomes level 1.
----
---- @param child table      Child entry from parse_children()
---- @param child_level number  The original heading level of this child
---- @return string[]        Lines for the new file
-local function build_file_content(child, child_level)
+    -- Extract section content (everything below the heading, before next same-level)
     local content = {}
-    local shift = 1 - child_level -- e.g., child at level 2 → shift = -1
+    local shift = location.heading_level -- stars to subtract
 
-    -- Include the heading line (shifted to level 1)
-    table.insert(content, shift_heading_level(child.heading_line, shift))
-
-    -- Include all body lines (shift any sub-headings)
-    for _, line in ipairs(child.lines) do
-        table.insert(content, shift_heading_level(line, shift))
+    for i = location.start_line + 1, location.end_line - 1 do
+        local line = source_lines[i]
+        -- Shift heading stars (keep numbering and everything else untouched)
+        local stars, rest = line:match("^(%*+)(%s.*)$")
+        if stars then
+            local new_level = #stars - shift
+            if new_level < 1 then
+                new_level = 1
+            end
+            line = string.rep("*", new_level) .. rest
+        end
+        table.insert(content, line)
     end
 
-    -- Remove trailing empty lines
+    -- Remove trailing empty lines from content
     while #content > 0 and content[#content] == "" do
         table.remove(content)
     end
 
-    return content
-end
+    -- Write new file
+    vim.fn.writefile(content, file_path)
 
---- Execute the extraction.
----
---- @param location EntryLocation  The located entry
---- @param preamble string[]       Preamble lines (content between entry heading and first child)
---- @param children table[]        Parsed child entries
---- @param child_level number      The heading level of the children (for level adjustment)
---- @return boolean success
---- @return string|nil error
-local function execute_extraction(location, preamble, children, child_level)
-    local title_sep = config.get("number_title_separator", ". ")
-    local parent_dir = vim.fn.fnamemodify(location.filepath, ":p:h")
-
-    -- Directory name = entry's prefix + title separator + title (sanitized)
-    local dir_name = location.entry_number .. title_sep .. sanitize_filename(location.entry_title)
-    local dir_path = parent_dir .. "/" .. dir_name
-
-    -- Check directory doesn't already exist
-    local stat = vim.uv.fs_stat(dir_path)
-    if stat then
-        return false, string.format("Directory already exists: %s", dir_path)
+    -- Remove children from source (keep heading line at start_line)
+    local new_source = {}
+    for i = 1, location.start_line do
+        table.insert(new_source, source_lines[i])
     end
-
-    vim.fn.mkdir(dir_path, "p")
-
-    -- Write each child as a separate file
-    for _, child in ipairs(children) do
-        local file_name = child.prefix .. title_sep .. sanitize_filename(child.title) .. ".norg"
-        local file_path = dir_path .. "/" .. file_name
-        local content = build_file_content(child, child_level)
-        vim.fn.writefile(content, file_path)
+    for i = location.end_line, #source_lines do
+        table.insert(new_source, source_lines[i])
     end
+    vim.fn.writefile(new_source, location.filepath)
 
-    -- Generate index.norg for the new directory
-    local dir_tree = status.build_directory_tree(dir_path)
-    local idx_lines = status.render_as_norg(dir_tree, { max_depth = 2, base_level = 0 })
-
-    -- If there's preamble content, prepend it to index.norg
-    if #preamble > 0 then
-        -- Remove trailing empty lines from preamble
-        while #preamble > 0 and preamble[#preamble] == "" do
-            table.remove(preamble)
-        end
-        if #preamble > 0 then
-            table.insert(preamble, "") -- blank separator line
-            for _, line in ipairs(idx_lines) do
-                table.insert(preamble, line)
-            end
-            idx_lines = preamble
-        end
-    end
-
-    vim.fn.writefile(idx_lines, dir_path .. "/index.norg")
-
-    -- Remove the entry's section from the source file (or delete the file)
-    local source_lines = vim.fn.readfile(location.filepath)
-
-    if location.is_file_level then
-        -- Entry is the whole file — delete it
-        local ok, err = os.remove(location.filepath)
-        if not ok then
-            vim.notify(
-                string.format("Warning: could not remove original file: %s", err or "unknown"),
-                vim.log.levels.WARN
-            )
-        end
-    else
-        -- Remove just the entry's section from the file
-        -- start_line and end_line are 1-indexed; end_line is exclusive
-        local new_lines = {}
-        for i = 1, location.start_line - 1 do
-            table.insert(new_lines, source_lines[i])
-        end
-        for i = location.end_line, #source_lines do
-            table.insert(new_lines, source_lines[i])
-        end
-
-        -- Remove trailing empty lines at the splice point
-        -- (avoid double blank lines where the section was removed)
-        local splice_point = location.start_line - 1
-        while splice_point > 0 and splice_point <= #new_lines
-            and new_lines[splice_point] == ""
-            and splice_point + 1 <= #new_lines
-            and new_lines[splice_point + 1] == "" do
-            table.remove(new_lines, splice_point)
-        end
-
-        -- Check if file is now empty (or only whitespace)
-        local has_content = false
-        for _, line in ipairs(new_lines) do
-            if line:match("%S") then
-                has_content = true
-                break
-            end
-        end
-
-        if not has_content then
-            -- File is empty after extraction — delete it
-            local ok, err = os.remove(location.filepath)
-            if not ok then
-                vim.notify(
-                    string.format("Warning: could not remove empty file: %s", err or "unknown"),
-                    vim.log.levels.WARN
-                )
-            end
-        else
-            vim.fn.writefile(new_lines, location.filepath)
-        end
-    end
-
-    -- Update caches and status files
+    -- Invalidate caches
     idx.invalidate(location.filepath)
     idx.invalidate_project_cache()
 
-    -- Regenerate parent index.norg
-    local parent_index = parent_dir .. "/index.norg"
-    if vim.fn.filereadable(parent_index) == 1 then
-        status.update_file(parent_index, parent_dir, "index")
-    else
-        local parent_tree = status.build_directory_tree(parent_dir)
-        local parent_lines = status.render_as_norg(parent_tree, { max_depth = 2, base_level = 0 })
-        vim.fn.writefile(parent_lines, parent_index)
-    end
-
-    -- Regenerate project.norg
-    local root = project.find_root(dir_path .. "/index.norg")
+    -- Update status files if applicable
+    local root = project.find_root(file_path)
     if root then
-        local project_file = root .. "/project.norg"
-        if vim.fn.filereadable(project_file) == 1 then
-            status.update_file(project_file, root, "project")
+        local project_path = root .. "/project.norg"
+        if vim.fn.filereadable(project_path) == 1 and location.filepath ~= project_path then
+            status.update_file(project_path, root, "project")
         end
     end
 
@@ -598,9 +392,9 @@ end
 --- MAIN ENTRY
 ---------------------------------------------------------------------------
 
---- Extract an entry and its sub-entries into a directory structure.
---- Identifies the target from cursor position, locates it in the project,
---- parses its children, shows confirmation, and executes.
+--- Extract a heading's content into its own .norg file.
+--- The heading line stays in place (for navigation via its link),
+--- and all content below it moves to the new file with heading levels shifted.
 ---
 --- @param buf number|nil  Buffer handle (defaults to current buffer)
 function M.extract(buf)
@@ -620,99 +414,55 @@ function M.extract(buf)
         return
     end
 
-    -- Read the source file and parse children
-    local lines = vim.fn.readfile(location.filepath)
-    if #lines == 0 then
-        vim.notify("NeorgPMExtract: Source file is empty", vim.log.levels.ERROR)
-        return
-    end
-
-    local preamble, children, child_level = parse_children(lines, location)
-
-    if #children == 0 then
+    -- Entry is already a standalone file — nothing to extract
+    if location.is_file_level then
         vim.notify(
-            string.format(
-                "NeorgPMExtract: Entry '%s' has no child headings to extract.",
-                number
-            ),
+            string.format("NeorgPMExtract: Entry '%s' is already a file — nothing to extract.", number),
             vim.log.levels.WARN
         )
         return
     end
 
-    -- Build confirmation message
+    -- Section has no content below the heading
+    if location.end_line - location.start_line <= 1 then
+        vim.notify(
+            string.format("NeorgPMExtract: Entry '%s' has no content below it to extract.", number),
+            vim.log.levels.WARN
+        )
+        return
+    end
+
+    -- Build preview
     local title_sep = config.get("number_title_separator", ". ")
-    local dir_name = location.entry_number .. title_sep .. sanitize_filename(location.entry_title)
+    local file_name = location.entry_number .. title_sep
+        .. sanitize_filename(location.entry_title) .. ".norg"
     local source_name = vim.fn.fnamemodify(location.filepath, ":t")
-
-    local preview = { string.format('Extract "%s. %s" → directory:', location.entry_number, location.entry_title) }
-    table.insert(preview, string.format("  Create: %s/", dir_name))
-    for _, child in ipairs(children) do
-        local fname = child.prefix .. title_sep .. sanitize_filename(child.title) .. ".norg"
-        table.insert(preview, string.format("  Create: %s/%s", dir_name, fname))
-    end
-    table.insert(preview, string.format("  Create: %s/index.norg", dir_name))
-    if location.is_file_level then
-        table.insert(preview, string.format("  Remove: %s", source_name))
-    else
-        table.insert(preview, string.format("  Modify: %s (remove section %s)", source_name, number))
-    end
-
-    local preview_text = table.concat(preview, "\n")
+    local line_count = location.end_line - location.start_line - 1
 
     -- Show confirmation
-    vim.ui.select({ "Yes", "No", "Show details" }, {
+    vim.ui.select({ "Yes", "No" }, {
         prompt = string.format(
-            "Extract '%s' (%d children) into directory '%s/'? ",
-            number, #children, dir_name
+            "Extract '%s' (%d lines) → %s? ",
+            number, line_count, file_name
         ),
     }, function(choice)
         if choice == "Yes" then
-            local ok, extract_err = execute_extraction(location, preamble, children, child_level)
+            local ok, extract_err = execute_extraction(location)
             if ok then
                 vim.notify(
-                    string.format(
-                        "Extracted '%s' → %d files in '%s/'",
-                        number, #children, dir_name
-                    ),
+                    string.format("Extracted → %s", file_name),
                     vim.log.levels.INFO
                 )
 
-                -- If the source file was open in a buffer and got deleted, clean up
-                if location.is_file_level or not vim.uv.fs_stat(location.filepath) then
-                    for _, b in ipairs(vim.api.nvim_list_bufs()) do
-                        if vim.api.nvim_buf_is_valid(b)
-                            and vim.api.nvim_buf_get_name(b) == location.filepath then
-                            vim.api.nvim_buf_delete(b, { force = true })
-                            break
-                        end
-                    end
-                else
-                    -- Source file was modified — reload if open
-                    for _, b in ipairs(vim.api.nvim_list_bufs()) do
-                        if vim.api.nvim_buf_is_valid(b)
-                            and vim.api.nvim_buf_get_name(b) == location.filepath then
-                            vim.api.nvim_buf_call(b, function()
-                                vim.cmd("edit!")
-                            end)
-                            break
-                        end
-                    end
-                end
-
-                -- Refresh current buffer if it's a status file
+                -- Refresh current buffer if it's the source file
                 local current_buf = vim.api.nvim_get_current_buf()
-                if vim.api.nvim_buf_is_valid(current_buf) then
-                    local current_name = vim.fn.fnamemodify(vim.api.nvim_buf_get_name(current_buf), ":t")
-                    if current_name == "project.norg" or current_name == "index.norg" then
-                        vim.cmd("edit!")
-                    end
+                if vim.api.nvim_buf_is_valid(current_buf)
+                    and vim.api.nvim_buf_get_name(current_buf) == location.filepath then
+                    vim.cmd("edit!")
                 end
             else
                 vim.notify("NeorgPMExtract: " .. (extract_err or "Unknown error"), vim.log.levels.ERROR)
             end
-        elseif choice == "Show details" then
-            vim.notify(preview_text, vim.log.levels.INFO)
         end
     end)
 end
