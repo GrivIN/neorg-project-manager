@@ -336,9 +336,27 @@ local function execute_extraction(location)
     -- Read source file
     local source_lines = vim.fn.readfile(location.filepath)
 
-    -- Extract section content (everything below the heading, before next same-level)
-    local content = {}
-    local shift = location.heading_level -- stars to subtract
+    -- Build root heading: the entry heading shifted to level 1, with link/count stripped
+    local heading_line = source_lines[location.start_line]
+    local root_heading
+    do
+        local stars, rest = heading_line:match("^(%*+)(%s.*)$")
+        if stars then
+            -- Shift to level 1
+            root_heading = "*" .. rest
+        else
+            root_heading = heading_line
+        end
+        -- Strip {* number} link syntax (status-file artifact)
+        root_heading = root_heading:gsub("%s*{%*+%s+[^}]+}", "")
+        -- Strip [N/M] progress count (status-file artifact)
+        root_heading = root_heading:gsub("%s*%[%d+/%d+%]%s*$", "")
+    end
+
+    -- Extract section content (children below the heading)
+    -- Shift = heading_level - 1 (root heading takes level 1, children start at level 2)
+    local content = { root_heading }
+    local shift = location.heading_level - 1
 
     for i = location.start_line + 1, location.end_line - 1 do
         local line = source_lines[i]

@@ -450,6 +450,16 @@ function M.renumber(buf)
         local anchored = false
         local title_text = vim.treesitter.get_node_text(h.title_node, buf)
 
+        -- Skip file-title heading: if this is a level-1 heading whose existing
+        -- number matches the file prefix, it's a document title (e.g., the root
+        -- heading of an extracted file). Don't renumber it, don't consume a counter.
+        if prefix and prefix ~= "" and h.level == 1 then
+            local existing_num, _, _ = M.parse_number_and_title(title_text)
+            if existing_num == prefix then
+                goto next_heading
+            end
+        end
+
         -- Try to anchor level-1 headings in prefix-less files
         if can_anchor and h.level == 1 then
             local existing_num, _, _ = M.parse_number_and_title(title_text)
@@ -498,6 +508,8 @@ function M.renumber(buf)
                 new_title = new_title,
             })
         end
+
+        ::next_heading::
     end
 
     if #changes == 0 and vim.tbl_isempty(old_to_new) then

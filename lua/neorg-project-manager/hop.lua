@@ -123,8 +123,10 @@ function M.try_number_hop(buf)
     location_text = vim.trim(location_text)
 
     -- 1. Try current file's local index (fast path)
+    -- Skip if the target is on the same line as the cursor (self-referencing managed heading)
+    local cursor_line = vim.api.nvim_win_get_cursor(0)[1] - 1 -- 0-indexed
     local local_index = numbering.build_number_index(buf)
-    if local_index[location_text] then
+    if local_index[location_text] and local_index[location_text].line ~= cursor_line then
         vim.cmd("normal! m`")
         vim.api.nvim_win_set_cursor(0, { local_index[location_text].line + 1, 0 })
         return true
