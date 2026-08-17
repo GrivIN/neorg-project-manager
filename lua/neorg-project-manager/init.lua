@@ -391,10 +391,8 @@ function M.attach(buf)
     -- Fire User event for extensibility
     vim.api.nvim_exec_autocmds("User", { pattern = "NeorgPMAttach", data = { buf = buf } })
 
-    -- Set up folds for status files (project.norg / index.norg)
-    if fold.is_status_file(buf) then
-        fold.setup_folds(buf)
-    end
+    -- Set up folds for all norg buffers (heading-based folding with body toggle)
+    fold.setup_folds(buf)
 
     --- Check if auto-renumbering should run for this buffer.
     --- Only renumbers if the file is inside a project OR already has numbered headings.
