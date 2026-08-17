@@ -41,6 +41,15 @@ M.defaults = {
     renumber_on_save = true,            -- Renumber on BufWritePre
     renumber_on_heading_leave = true,   -- Renumber when cursor leaves a modified heading line
 
+    --- Anchor root headings: when true, level-1 headings in files without a
+    --- prefix (standalone files, project.norg) preserve their existing numbers.
+    --- Children are numbered relative to the anchor. Un-numbered level-1 headings
+    --- get the next consecutive number after the previous anchor.
+    ---
+    --- Example: if you type "* 42. Project Alpha", children become 42.1, 42.2, etc.
+    --- The next un-numbered level-1 heading becomes "43. ..."
+    anchor_root_headings = true,
+
     ---------------------------------------------------------------------------
     --- NUMBERING FORMAT CONFIGURATION
     ---------------------------------------------------------------------------

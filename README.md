@@ -419,6 +419,8 @@ compare:
 
 - **Auto-numbering** — headings get hierarchical numbers (`1.1.3.1.`) written
   directly into the file, maintained on save
+- **Custom root numbering** — type a custom number on a root heading (e.g.,
+  `* 42. Project Alpha`) and all children follow from it automatically
 - **Cross-file navigation** — press `<CR>` on `{* 1.1.3}` to jump to that
   heading, even if it's in another file
 - **Prerequisite tracking** — virtual text shows `[BLOCKED: 1/2 prereqs done]`
@@ -487,6 +489,53 @@ Add todo states and they propagate normally:
 *** (x) 1.1.1. Setup
 *** ( ) 1.1.2. Build Pipeline
 ```
+
+### Custom root numbering
+
+If your company assigns unique project numbers, type the root heading with
+that number. The plugin preserves it as an anchor — all children follow:
+
+```norg
+* 42. Project Alpha
+** Stage 1
+*** Setup
+*** Build Pipeline
+* Project Beta
+** Feature X
+```
+
+After `:NeorgPMRenumber` (`<LocalLeader>pr`):
+
+```norg
+* 42. Project Alpha
+** 42.1. Stage 1
+*** 42.1.1. Setup
+*** 42.1.2. Build Pipeline
+* 43. Project Beta
+** 43.1. Feature X
+```
+
+`42` is preserved (user-typed anchor). `Project Beta` had no number, so it
+gets `43` (next consecutive). All children inherit from their parent.
+
+You can have multiple anchored projects in one file with gaps:
+
+```norg
+* 42. Project Alpha
+** 42.1. Stage 1
+* 100. Special Project
+** 100.1. Setup
+* Project Gamma
+** 101.1. Feature
+```
+
+Each anchor resets the counter. Un-numbered headings always get `previous + 1`.
+
+This only applies to level-1 headings in files without a prefix (standalone
+files, `project.norg`). Files with a prefix (e.g., `1.1.3.1. Stage 1.norg`)
+always number their headings relative to the file prefix — no anchoring.
+
+Disable with `anchor_root_headings = false` to get pure positional numbering.
 
 ### Multi-file project
 
@@ -796,6 +845,10 @@ require("neorg-project-manager").setup({
     -- Triggers
     renumber_on_save = true,
     renumber_on_heading_leave = true,
+
+    -- Anchor root headings: preserve user-typed numbers on level-1 headings
+    -- in files without a prefix. Children number relative to the anchor.
+    anchor_root_headings = true,
 
     -- Numbering format
     -- Styles per total depth: "numeric", "alpha_upper", "alpha_lower",

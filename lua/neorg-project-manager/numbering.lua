@@ -88,6 +88,87 @@ local style_converters = {
     roman_lower = to_roman_lower,
 }
 
+---------------------------------------------------------------------------
+--- REVERSE CONVERTERS (formatted string → integer)
+---------------------------------------------------------------------------
+
+--- Convert an uppercase alphabetic string back to an integer (A→1, AA→27).
+--- @param s string
+--- @return number|nil
+local function from_alpha_upper(s)
+    if not s:match("^[A-Z]+$") then return nil end
+    local n = 0
+    for i = 1, #s do
+        n = n * 26 + (s:byte(i) - 64)
+    end
+    return n
+end
+
+--- Convert a lowercase alphabetic string back to an integer (a→1, aa→27).
+--- @param s string
+--- @return number|nil
+local function from_alpha_lower(s)
+    if not s:match("^[a-z]+$") then return nil end
+    return from_alpha_upper(s:upper())
+end
+
+--- Roman numeral character values for reverse parsing.
+local roman_values = {
+    i = 1, v = 5, x = 10, l = 50, c = 100, d = 500, m = 1000,
+}
+
+--- Convert a lowercase roman numeral string back to an integer.
+--- @param s string
+--- @return number|nil
+local function from_roman_lower(s)
+    if not s:match("^[ivxlcdm]+$") then return nil end
+    local total = 0
+    local prev = 0
+    for i = #s, 1, -1 do
+        local val = roman_values[s:sub(i, i)]
+        if not val then return nil end
+        if val < prev then
+            total = total - val
+        else
+            total = total + val
+        end
+        prev = val
+    end
+    if total <= 0 then return nil end
+    return total
+end
+
+--- Convert an uppercase roman numeral string back to an integer.
+--- @param s string
+--- @return number|nil
+local function from_roman_upper(s)
+    if not s:match("^[IVXLCDM]+$") then return nil end
+    return from_roman_lower(s:lower())
+end
+
+--- Map of style names to reverse converter functions (string → integer).
+local reverse_converters = {
+    numeric = tonumber,
+    alpha_upper = from_alpha_upper,
+    alpha_lower = from_alpha_lower,
+    roman_upper = from_roman_upper,
+    roman_lower = from_roman_lower,
+}
+
+--- Parse a formatted counter string back to an integer value.
+--- Inverse of format_counter(). Used for anchor detection.
+---
+--- @param str string    The formatted counter string (e.g., "42", "C", "III")
+--- @param style string  The style used to format it
+--- @return number|nil   The integer counter value, or nil if parsing failed
+function M.reverse_counter(str, style)
+    local converter = reverse_converters[style]
+    if not converter then
+        return tonumber(str)
+    end
+    return converter(str)
+end
+
 --- Format a single counter value using the specified style.
 --- Exported so custom `number_format` functions can reuse built-in converters.
 ---
@@ -357,13 +438,43 @@ function M.renumber(buf)
     local title_sep = config.get("number_title_separator", ". ")
     local prefix = M.get_file_prefix(buf)
 
+    -- Anchoring: in prefix-less files, level-1 headings with existing numbers
+    -- are treated as anchors (their number is preserved, children follow).
+    local anchor_roots = config.get("anchor_root_headings", true)
+    local can_anchor = anchor_roots and (not prefix or prefix == "")
+
     local old_to_new = {}
     local changes = {}
 
     for _, h in ipairs(headings) do
-        counters[h.level] = counters[h.level] + 1
-        for i = h.level + 1, 6 do
-            counters[i] = 0
+        local anchored = false
+
+        -- Try to anchor level-1 headings in prefix-less files
+        if can_anchor and h.level == 1 then
+            local title_text = vim.treesitter.get_node_text(h.title_node, buf)
+            local existing_num, _, _ = M.parse_number_and_title(title_text)
+            if existing_num then
+                -- Parse the root-level number back to a counter value
+                local styles = config.get("numbering_styles",
+                    { "numeric", "numeric", "numeric", "numeric", "numeric", "numeric" })
+                local style = styles[1] or "numeric"
+                local counter_val = M.reverse_counter(existing_num, style)
+                if counter_val then
+                    counters[1] = counter_val
+                    for i = 2, 6 do
+                        counters[i] = 0
+                    end
+                    anchored = true
+                end
+            end
+        end
+
+        if not anchored then
+            -- Normal increment
+            counters[h.level] = counters[h.level] + 1
+            for i = h.level + 1, 6 do
+                counters[i] = 0
+            end
         end
 
         local correct_number = M.format_number(counters, h.level, prefix)
