@@ -35,16 +35,28 @@ local numbering = require("neorg-project-manager.numbering")
 ---------------------------------------------------------------------------
 
 --- Sanitize a string for use as a filename/directory name.
---- Replaces characters that are unsafe on common filesystems (/ \ : * ? " < > |)
---- with underscores. Also trims trailing spaces and dots (Windows restriction).
+--- Strips norg-specific syntax (links, progress counts, brackets) and replaces
+--- filesystem-unsafe characters. Trims trailing spaces and dots.
 ---
 --- @param name string  The raw name (e.g., a heading title)
 --- @return string      Sanitized name safe for use in file paths
 local function sanitize_filename(name)
+    -- Strip norg link syntax: {* number}, {*** number}, etc.
+    local sanitized = name:gsub("{%*+%s+[^}]+}", "")
+    -- Strip progress counts: [3/5]
+    sanitized = sanitized:gsub("%[%d+/%d+%]", "")
+    -- Strip parenthesized annotations: (app/auth/), (optional), etc.
+    sanitized = sanitized:gsub("%b()", "")
+    -- Strip remaining brackets and braces
+    sanitized = sanitized:gsub("[{}%[%]]", "")
     -- Replace filesystem-unsafe characters with underscore
-    local sanitized = name:gsub('[/\\:*?"<>|]', "_")
-    -- Trim trailing spaces and dots (problematic on Windows)
-    sanitized = sanitized:gsub("[%.%s]+$", "")
+    sanitized = sanitized:gsub('[/\\:*?"<>|]', "_")
+    -- Collapse multiple spaces/underscores into one
+    sanitized = sanitized:gsub("[%s_]+", " ")
+    -- Trim leading/trailing whitespace
+    sanitized = vim.trim(sanitized)
+    -- Trim trailing dots (Windows restriction)
+    sanitized = sanitized:gsub("%.+$", "")
     return sanitized
 end
 
