@@ -245,6 +245,23 @@ function M.get(buf)
                     end
                     return { filepath = entry.filepath, line = 0, level = 0, state = nil }
                 end
+
+                -- Fallback: search in status files (project.norg / index.norg)
+                -- Headings that only exist inside status files (not as standalone files)
+                local project_file = root .. "/project.norg"
+                if vim.fn.filereadable(project_file) == 1 then
+                    local headings = get_file_index(project_file, nil)
+                    local target_in_status = headings[number_key]
+                    if target_in_status then
+                        return {
+                            filepath = project_file,
+                            line = target_in_status.line,
+                            level = target_in_status.level,
+                            state = target_in_status.state,
+                        }
+                    end
+                end
+
                 return nil
             end
 
