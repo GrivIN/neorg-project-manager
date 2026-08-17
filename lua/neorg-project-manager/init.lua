@@ -317,10 +317,17 @@ function M.setup(opts)
     end, { desc = "Regenerate ALL index.norg + project.norg in the project" })
 
     --- Toggle fold (collapse/expand) a tree element in project.norg/index.norg.
+    --- Hides body/description content while keeping all headings visible.
     vim.api.nvim_create_user_command("NeorgPMToggle", function()
         local buf = vim.api.nvim_get_current_buf()
-        fold.toggle(buf)
-    end, { desc = "Toggle tree element fold (collapse/expand heading with children)" })
+        fold.toggle_body(buf)
+    end, { desc = "Toggle body folds (show headings only, hide descriptions)" })
+
+    --- Toggle full fold — collapse heading with ALL children (body + sub-headings).
+    vim.api.nvim_create_user_command("NeorgPMToggleAll", function()
+        local buf = vim.api.nvim_get_current_buf()
+        fold.toggle_all(buf)
+    end, { desc = "Toggle full fold (collapse/expand heading with all children)" })
 
     --- Extract a .norg file into a directory with separate files per heading.
     vim.api.nvim_create_user_command("NeorgPMExtract", function()
@@ -374,7 +381,9 @@ function M.attach(buf)
         vim.keymap.set("n", prefix .. "S", "<cmd>NeorgPMStatusAll<CR>",
             { buffer = buf, desc = "Update all status files" })
         vim.keymap.set("n", prefix .. "t", "<cmd>NeorgPMToggle<CR>",
-            { buffer = buf, desc = "Toggle tree fold" })
+            { buffer = buf, desc = "Toggle body folds (headings only)" })
+        vim.keymap.set("n", prefix .. "T", "<cmd>NeorgPMToggleAll<CR>",
+            { buffer = buf, desc = "Toggle full fold (collapse all)" })
         vim.keymap.set("n", prefix .. "e", "<cmd>NeorgPMExtract<CR>",
             { buffer = buf, desc = "Extract to directory" })
     end

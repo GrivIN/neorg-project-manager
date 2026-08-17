@@ -635,8 +635,9 @@ auto-update). Everything else is yours — never touched.
 | `<LocalLeader>pR` | Renumber entire project (files + dirs + links) |
 | `<LocalLeader>ps` | Update status in current `project.norg` / `index.norg` |
 | `<LocalLeader>pS` | Update all status files across the project |
-| `<LocalLeader>pt` | Toggle fold — collapse/expand heading with all children |
-| `<LocalLeader>pe` | Extract file headings into a directory structure |
+| `<LocalLeader>pt` | Toggle body folds — hide descriptions, keep all headings visible |
+| `<LocalLeader>pT` | Toggle full fold — collapse heading with all children |
+| `<LocalLeader>pe` | Extract entry into a directory structure |
 
 Disable defaults with `default_keybinds = false`. Change the prefix
 with `keybind_prefix = "n"` (becomes `<LocalLeader>nr`, etc.).
@@ -733,31 +734,48 @@ The plugin shows virtual text:
 
 ### Tree fold / toggle
 
-In `project.norg` or `index.norg`, the tree can get large. Use
-`:NeorgPMToggle` (`<LocalLeader>pt`) to collapse or expand any heading and all
-its children with a single keystroke:
+In `project.norg` or `index.norg`, the tree can get large. Two toggle
+commands help navigate:
+
+**`<LocalLeader>pt`** — Toggle body folds (show headings only):
 
 ```norg
-* (-) my-cool-startup [0/2]          <- cursor here, press <LocalLeader>pt
-** (-) 1.1. Stage 1 {* 1.1} [2/3]   <- these lines get folded away
+** (-) 1.1. Stage 1 {* 1.1} [2/3]       <- cursor here, press <LocalLeader>pt
+   Key architectural decisions:            <- body text gets hidden
+   - Microservices for auth
+*** (x) 1.1.1. X-Code Setup {* 1.1.1}
+   Setup instructions here...              <- also hidden
+*** (x) 1.1.2. Build Pipeline {* 1.1.2}
+   Pipeline configuration...               <- also hidden
+```
+
+After `pt` — all headings visible, body text hidden:
+
+```norg
+** (-) 1.1. Stage 1 {* 1.1} [2/3]
 *** (x) 1.1.1. X-Code Setup {* 1.1.1}
 *** (x) 1.1.2. Build Pipeline {* 1.1.2}
-*** (-) 1.1.3. Authentication {* 1.1.3} [1/2]
-** ( ) 1.2. Stage 2 {* 1.2}
 ```
 
-After toggling, you see only:
+Press `<LocalLeader>pt` again to reveal all descriptions.
+
+**`<LocalLeader>pT`** — Toggle full fold (collapse everything):
+
+```norg
+** (-) 1.1. Stage 1 {* 1.1} [2/3]       <- cursor here, press <LocalLeader>pT
+```
+
+After `pT` — heading + all children + body collapsed to one line:
 
 ```
-* (-) my-cool-startup [0/2]  [+6 lines]
+** (-) 1.1. Stage 1 {* 1.1} [2/3]  [+8 lines]
 ```
 
-Press `<LocalLeader>pt` again to expand all children back.
+Press `<LocalLeader>pT` again to expand everything back.
 
 Folds are automatically set up for `project.norg` and `index.norg` buffers.
-They start fully expanded (all headings visible). The fold level is based on
-heading depth (number of `*` characters), so you can also use standard Neovim
-fold commands (`zM` to close all, `zR` to open all, `zo`/`zc` for
+They start fully expanded (all headings visible). You can also use standard
+Neovim fold commands (`zM` to close all, `zR` to open all, `zo`/`zc` for
 individual levels).
 
 ### Extract to directory
@@ -815,8 +833,9 @@ file's contents (all its level-1 headings become files in a new
 | `:NeorgPMRenumberProject` | `<LocalLeader>pR` | Renumber all project files/dirs + all links |
 | `:NeorgPMStatus` | `<LocalLeader>ps` | Update status in current `project.norg` / `index.norg` |
 | `:NeorgPMStatusAll` | `<LocalLeader>pS` | Regenerate ALL status files across the project |
-| `:NeorgPMToggle` | `<LocalLeader>pt` | Toggle tree fold (collapse/expand heading with children) |
-| `:NeorgPMExtract` | `<LocalLeader>pe` | Extract file headings into a directory structure |
+| `:NeorgPMToggle` | `<LocalLeader>pt` | Toggle body folds (hide descriptions, keep headings visible) |
+| `:NeorgPMToggleAll` | `<LocalLeader>pT` | Toggle full fold (collapse heading with all children) |
+| `:NeorgPMExtract` | `<LocalLeader>pe` | Extract entry into a directory structure |
 | (automatic) | `<CR>` | Follow `{* number}` link (cross-file), falls back to Neorg hop |
 
 Default keybinds use `<LocalLeader>` + the `keybind_prefix` (default `"p"`).
