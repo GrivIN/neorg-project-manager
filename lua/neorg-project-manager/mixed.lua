@@ -161,62 +161,48 @@ function M.refresh(buf, ns, root)
 
     local introspector_active = is_neorg_introspector_active()
 
-    local function process_node(node)
-        local level = helpers.get_heading_level(node)
-        if level then
-            local state = helpers.get_todo_state(node)
-            if state then
-                local done, total = 0, 0
-                local is_cross_file = false
+    helpers.walk_headings(root, function(node, level)
+        local state = helpers.get_todo_state(node)
+        if state then
+            local done, total = 0, 0
+            local is_cross_file = false
 
-                -- Count local children (skip if introspector handles it)
-                if not introspector_active then
-                    done, total = M.count_children_todos(node, level)
-                end
+            -- Count local children (skip if introspector handles it)
+            if not introspector_active then
+                done, total = M.count_children_todos(node, level)
+            end
 
-                -- Cross-file fallback: if no local children, check linked file
-                -- (always runs — introspector can't do cross-file)
-                if total == 0 then
-                    local row = node:start()
-                    local line = vim.api.nvim_buf_get_lines(buf, row, row + 1, false)[1]
-                    if line then
-                        local link_num = helpers.extract_link_number_from_line(line)
-                        if link_num then
-                            done, total = count_cross_file_children(buf, link_num)
-                            if total > 0 then
-                                is_cross_file = true
-                            end
+            -- Cross-file fallback: if no local children, check linked file
+            -- (always runs — introspector can't do cross-file)
+            if total == 0 then
+                local row = node:start()
+                local line = vim.api.nvim_buf_get_lines(buf, row, row + 1, false)[1]
+                if line then
+                    local link_num = helpers.extract_link_number_from_line(line)
+                    if link_num then
+                        done, total = count_cross_file_children(buf, link_num)
+                        if total > 0 then
+                            is_cross_file = true
                         end
                     end
                 end
-
-                -- Show virtual text:
-                -- - Always for cross-file counts (introspector can't see these)
-                -- - Only for local counts when introspector is NOT active
-                if total > 0 and (is_cross_file or not introspector_active) then
-                    local row = node:start()
-                    local format_fn = config.get("mixed_format")
-                    local text = format_fn(done, total)
-                    vim.api.nvim_buf_set_extmark(buf, ns, row, 0, {
-                        virt_text = { { " " .. text, config.get("mixed_progress_highlight") } },
-                        virt_text_pos = "eol",
-                        hl_mode = "combine",
-                    })
-                end
             end
 
-            for child in node:iter_children() do
-                process_node(child)
+            -- Show virtual text:
+            -- - Always for cross-file counts (introspector can't see these)
+            -- - Only for local counts when introspector is NOT active
+            if total > 0 and (is_cross_file or not introspector_active) then
+                local row = node:start()
+                local format_fn = config.get("mixed_format")
+                local text = format_fn(done, total)
+                vim.api.nvim_buf_set_extmark(buf, ns, row, 0, {
+                    virt_text = { { " " .. text, config.get("mixed_progress_highlight") } },
+                    virt_text_pos = "eol",
+                    hl_mode = "combine",
+                })
             end
-            return
         end
-
-        for child in node:iter_children() do
-            process_node(child)
-        end
-    end
-
-    process_node(root)
+    end)
 end
 
 return M

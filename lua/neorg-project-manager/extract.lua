@@ -292,15 +292,11 @@ function M.locate_entry(number, root)
                 table.insert(status_files, dir_status)
             end
         end
-        local handle = vim.uv.fs_scandir(dir)
-        if not handle then return end
-        while true do
-            local name, entry_type = vim.uv.fs_scandir_next(handle)
-            if not name then break end
-            if entry_type == "directory" and name:sub(1, 1) ~= "." then
-                find_status_files(dir .. "/" .. name)
+        helpers.scandir(dir, function(name, entry_type, full_path)
+            if entry_type == "directory" then
+                find_status_files(full_path)
             end
-        end
+        end)
     end
     find_status_files(root)
 

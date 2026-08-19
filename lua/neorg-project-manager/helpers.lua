@@ -192,4 +192,63 @@ function M.natural_sort_prefixes(a, b)
     return false -- equal
 end
 
+---------------------------------------------------------------------------
+--- TREE-SITTER TRAVERSAL
+---------------------------------------------------------------------------
+
+--- Walk all heading nodes in a tree-sitter AST, calling a callback for each.
+--- Handles the recursive descent pattern shared by mixed/prereqs/etc.
+--- Headings are visited in document order; children are visited recursively.
+---
+--- @param root TSNode                              Root node to walk from
+--- @param callback fun(node: TSNode, level: number)  Called for each heading node with its level (1-6)
+function M.walk_headings(root, callback)
+    local function walk(node)
+        local level = M.get_heading_level(node)
+        if level then
+            callback(node, level)
+            for child in node:iter_children() do
+                walk(child)
+            end
+            return
+        end
+        for child in node:iter_children() do
+            walk(child)
+        end
+    end
+    walk(root)
+end
+
+---------------------------------------------------------------------------
+--- FILESYSTEM
+---------------------------------------------------------------------------
+
+--- Iterate over entries in a directory, skipping hidden files/dirs.
+--- Handles the fs_scandir boilerplate (open, loop, skip dot-prefixed, close).
+---
+--- @param dir string  Absolute path to the directory
+--- @param callback fun(name: string, entry_type: string, full_path: string): boolean|nil
+---     Called for each non-hidden entry. Return `false` to stop iteration early.
+---     Any other return value (including nil) continues iteration.
+function M.scandir(dir, callback)
+    local handle = vim.uv.fs_scandir(dir)
+    if not handle then
+        return
+    end
+
+    while true do
+        local name, entry_type = vim.uv.fs_scandir_next(handle)
+        if not name then
+            break
+        end
+
+        if name:sub(1, 1) ~= "." then
+            local result = callback(name, entry_type, dir .. "/" .. name)
+            if result == false then
+                return
+            end
+        end
+    end
+end
+
 return M

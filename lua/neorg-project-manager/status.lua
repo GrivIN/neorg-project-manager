@@ -85,47 +85,35 @@ end
 function M.build_directory_tree(dir_path, skip_file)
     local entries = {}
 
-    local handle = vim.uv.fs_scandir(dir_path)
-    if not handle then
-        return { prefix = nil, title = "Unknown", state = "undone", is_dir = true, children = {}, done = 0, total = 0 }
-    end
-
     -- Determine which file to skip: either explicit or auto-detect the status file
     local status_file_path = skip_file and (dir_path .. "/" .. skip_file) or project.find_status_file(dir_path)
     local status_file_name = status_file_path and vim.fn.fnamemodify(status_file_path, ":t") or nil
 
-    while true do
-        local name, entry_type = vim.uv.fs_scandir_next(handle)
-        if not name then break end
-        if name:sub(1, 1) == "." then
-            goto continue
-        end
+    helpers.scandir(dir_path, function(name, entry_type, full_path)
         -- Skip the status file for this directory
         if status_file_name and name == status_file_name then
-            goto continue
+            return
         end
 
         local prefix, title = project.extract_prefix(name)
         if prefix then
             if entry_type == "directory" then
-                local child_tree = M.build_directory_tree(dir_path .. "/" .. name)
+                local child_tree = M.build_directory_tree(full_path)
                 table.insert(entries, {
                     prefix = prefix, title = title, state = child_tree.state,
                     is_dir = true, filepath = nil, children = child_tree.children,
                     done = child_tree.done, total = child_tree.total,
                 })
             elseif entry_type == "file" and name:match("%.norg$") then
-                local filepath = dir_path .. "/" .. name
-                local file_state = index.get_file_state(filepath, prefix)
+                local file_state = index.get_file_state(full_path, prefix)
                 table.insert(entries, {
                     prefix = prefix, title = title, state = file_state,
-                    is_dir = false, filepath = filepath, children = {},
+                    is_dir = false, filepath = full_path, children = {},
                     done = 0, total = 0,
                 })
             end
         end
-        ::continue::
-    end
+    end)
 
     table.sort(entries, function(a, b)
         return helpers.natural_sort_prefixes(a.prefix or "", b.prefix or "")
@@ -477,27 +465,18 @@ function M.regenerate_all(root_path)
 
     -- Update status files in subdirectories
     local function regen_status_files(dir_path)
-        local handle = vim.uv.fs_scandir(dir_path)
-        if not handle then return end
-
-        while true do
-            local name, entry_type = vim.uv.fs_scandir_next(handle)
-            if not name then break end
-            if name:sub(1, 1) == "." then goto continue end
-
+        helpers.scandir(dir_path, function(name, entry_type, full_path)
             if entry_type == "directory" then
-                local sub_path = dir_path .. "/" .. name
                 local prefix, _ = project.extract_prefix(name)
                 if prefix then
-                    local sub_status = project.find_status_file(sub_path)
+                    local sub_status = project.find_status_file(full_path)
                     if sub_status and vim.fn.filereadable(sub_status) == 1 then
-                        M.update_file(sub_status, sub_path, "index")
+                        M.update_file(sub_status, full_path, "index")
                     end
                 end
-                regen_status_files(sub_path)
+                regen_status_files(full_path)
             end
-            ::continue::
-        end
+        end)
     end
 
     regen_status_files(root_path)

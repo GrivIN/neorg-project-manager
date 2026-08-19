@@ -277,85 +277,71 @@ function M.refresh(buf, ns, number_index, root)
         return
     end
 
-    local function process_node(node)
-        local level = helpers.get_heading_level(node)
-        if level then
-            local state = helpers.get_todo_state(node)
-            if state then
-                local prereq_pattern = config.get("prereq_pattern", "Pre%-requisites:")
-                local prereq_links = find_prereq_links(node, buf, prereq_pattern)
+    helpers.walk_headings(root, function(node, level)
+        local state = helpers.get_todo_state(node)
+        if state then
+            local prereq_pattern = config.get("prereq_pattern", "Pre%-requisites:")
+            local prereq_links = find_prereq_links(node, buf, prereq_pattern)
 
-                -- Cross-file fallback: if no local prereqs, check linked file
-                if #prereq_links == 0 then
-                    local row = node:start()
-                    local line = vim.api.nvim_buf_get_lines(buf, row, row + 1, false)[1]
-                    if line then
-                        local link_num = helpers.extract_link_number_from_line(line)
-                        if link_num then
-                            -- Find the file for this link number
-                            local project_mod = require("neorg-project-manager.project")
-                            local buf_filepath = vim.api.nvim_buf_get_name(buf)
-                            local root_path = project_mod.find_root(buf_filepath)
-                            if root_path then
-                                local entries = project_mod.scan(root_path)
-                                for _, entry in ipairs(entries) do
-                                    if not entry.is_dir and entry.prefix == link_num then
-                                        prereq_links = scan_file_for_prereqs(
-                                            entry.filepath, prereq_pattern
-                                        )
-                                        break
-                                    end
+            -- Cross-file fallback: if no local prereqs, check linked file
+            if #prereq_links == 0 then
+                local row = node:start()
+                local line = vim.api.nvim_buf_get_lines(buf, row, row + 1, false)[1]
+                if line then
+                    local link_num = helpers.extract_link_number_from_line(line)
+                    if link_num then
+                        -- Find the file for this link number
+                        local project_mod = require("neorg-project-manager.project")
+                        local buf_filepath = vim.api.nvim_buf_get_name(buf)
+                        local root_path = project_mod.find_root(buf_filepath)
+                        if root_path then
+                            local entries = project_mod.scan(root_path)
+                            for _, entry in ipairs(entries) do
+                                if not entry.is_dir and entry.prefix == link_num then
+                                    prereq_links = scan_file_for_prereqs(
+                                        entry.filepath, prereq_pattern
+                                    )
+                                    break
                                 end
                             end
                         end
                     end
                 end
+            end
 
-                if #prereq_links > 0 then
-                    local done = 0
-                    local total = #prereq_links
+            if #prereq_links > 0 then
+                local done = 0
+                local total = #prereq_links
 
-                    for _, link in ipairs(prereq_links) do
-                        local link_state = resolve_link_state(link.text, number_index, buf)
-                        if link_state == "done" then
-                            done = done + 1
-                        end
+                for _, link in ipairs(prereq_links) do
+                    local link_state = resolve_link_state(link.text, number_index, buf)
+                    if link_state == "done" then
+                        done = done + 1
                     end
+                end
 
-                    local row = node:start()
+                local row = node:start()
 
-                    if done < total then
-                        local blocked_format = config.get("blocked_format")
+                if done < total then
+                    local blocked_format = config.get("blocked_format")
+                    vim.api.nvim_buf_set_extmark(buf, ns, row, 0, {
+                        virt_text = { { " " .. blocked_format(done, total), config.get("blocked_highlight") } },
+                        virt_text_pos = "eol",
+                        hl_mode = "combine",
+                    })
+                elseif done == total then
+                    local started = has_started_children(node, level)
+                    if not started and state == "undone" then
                         vim.api.nvim_buf_set_extmark(buf, ns, row, 0, {
-                            virt_text = { { " " .. blocked_format(done, total), config.get("blocked_highlight") } },
+                            virt_text = { { " " .. config.get("ready_text"), config.get("ready_highlight") } },
                             virt_text_pos = "eol",
                             hl_mode = "combine",
                         })
-                    elseif done == total then
-                        local started = has_started_children(node, level)
-                        if not started and state == "undone" then
-                            vim.api.nvim_buf_set_extmark(buf, ns, row, 0, {
-                                virt_text = { { " " .. config.get("ready_text"), config.get("ready_highlight") } },
-                                virt_text_pos = "eol",
-                                hl_mode = "combine",
-                            })
-                        end
                     end
                 end
             end
-
-            for child in node:iter_children() do
-                process_node(child)
-            end
-            return
         end
-
-        for child in node:iter_children() do
-            process_node(child)
-        end
-    end
-
-    process_node(root)
+    end)
 end
 
 return M

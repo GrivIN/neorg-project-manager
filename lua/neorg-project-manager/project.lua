@@ -34,36 +34,27 @@ function M.find_status_file(dir)
     local dir_name = vim.fn.fnamemodify(dir, ":t")
     local dir_prefix, _ = M.extract_prefix(dir_name)
 
-    local handle = vim.uv.fs_scandir(dir)
-    if not handle then
-        return nil
-    end
-
-    while true do
-        local name, entry_type = vim.uv.fs_scandir_next(handle)
-        if not name then
-            break
-        end
-
+    local result = nil
+    helpers.scandir(dir, function(name, entry_type)
         if entry_type == "file" and name:match("%.norg$") then
             local file_prefix, _ = M.extract_prefix(name)
             if file_prefix then
                 if dir_prefix then
-                    -- Numbered subdirectory: match file prefix to dir prefix
                     if file_prefix == dir_prefix then
-                        return dir .. "/" .. name
+                        result = dir .. "/" .. name
+                        return false
                     end
                 else
-                    -- Root or un-numbered directory: match depth-1 file
                     if not file_prefix:find(sep, 1, true) then
-                        return dir .. "/" .. name
+                        result = dir .. "/" .. name
+                        return false
                     end
                 end
             end
         end
-    end
+    end)
 
-    return nil
+    return result
 end
 
 ---------------------------------------------------------------------------
@@ -191,24 +182,7 @@ function M.scan(root)
     local entries = {}
 
     local function scan_dir(dir_path)
-        local handle = vim.uv.fs_scandir(dir_path)
-        if not handle then
-            return
-        end
-
-        while true do
-            local name, entry_type = vim.uv.fs_scandir_next(handle)
-            if not name then
-                break
-            end
-
-            -- Skip hidden files/dirs
-            if name:sub(1, 1) == "." then
-                goto continue
-            end
-
-            local full_path = dir_path .. "/" .. name
-
+        helpers.scandir(dir_path, function(name, entry_type, full_path)
             if entry_type == "directory" then
                 local prefix, title = M.extract_prefix(name)
                 if prefix then
@@ -237,9 +211,7 @@ function M.scan(root)
                     })
                 end
             end
-
-            ::continue::
-        end
+        end)
     end
 
     scan_dir(root)

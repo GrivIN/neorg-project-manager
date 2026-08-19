@@ -43,18 +43,7 @@ local function compute_dir_renames(dir_path)
 
     -- Scan direct entries in this directory
     local entries = {}
-    local handle = vim.uv.fs_scandir(dir_path)
-    if not handle then
-        return renames
-    end
-
-    while true do
-        local name, entry_type = vim.uv.fs_scandir_next(handle)
-        if not name then break end
-        if name:sub(1, 1) == "." then
-            goto continue
-        end
-
+    helpers.scandir(dir_path, function(name, entry_type, full_path)
         local prefix, title = project.extract_prefix(name)
         if prefix then
             table.insert(entries, {
@@ -62,17 +51,14 @@ local function compute_dir_renames(dir_path)
                 prefix = prefix,
                 title = title,
                 entry_type = entry_type,
-                full_path = dir_path .. "/" .. name,
+                full_path = full_path,
             })
         end
-
-        ::continue::
-    end
+    end)
 
     -- Sort by existing prefix (natural sort for correct ordering at 10+ items)
-    local h = require("neorg-project-manager.helpers")
     table.sort(entries, function(a, b)
-        return h.natural_sort_prefixes(a.prefix, b.prefix)
+        return helpers.natural_sort_prefixes(a.prefix, b.prefix)
     end)
 
     -- Assign correct sequential numbers
@@ -116,17 +102,12 @@ function M.compute(root_path)
     --- Process a directory and all its subdirectories (depth-first).
     local function process_dir(dir_path)
         -- First, process subdirectories (depth-first so child renames happen before parent)
-        local handle = vim.uv.fs_scandir(dir_path)
-        if not handle then return end
-
         local subdirs = {}
-        while true do
-            local name, entry_type = vim.uv.fs_scandir_next(handle)
-            if not name then break end
-            if entry_type == "directory" and name:sub(1, 1) ~= "." then
-                table.insert(subdirs, dir_path .. "/" .. name)
+        helpers.scandir(dir_path, function(name, entry_type, full_path)
+            if entry_type == "directory" then
+                table.insert(subdirs, full_path)
             end
-        end
+        end)
 
         for _, subdir in ipairs(subdirs) do
             process_dir(subdir)
@@ -253,23 +234,13 @@ function M.update_all_links(root_path, old_to_new)
     --- Recursively find all .norg files
     local function find_norg_files(dir)
         local files = {}
-        local handle = vim.uv.fs_scandir(dir)
-        if not handle then return files end
-
-        while true do
-            local name, entry_type = vim.uv.fs_scandir_next(handle)
-            if not name then break end
-            if name:sub(1, 1) == "." then goto continue end
-
-            local full = dir .. "/" .. name
+        helpers.scandir(dir, function(name, entry_type, full)
             if entry_type == "file" and name:match("%.norg$") then
                 table.insert(files, full)
             elseif entry_type == "directory" then
                 vim.list_extend(files, find_norg_files(full))
             end
-
-            ::continue::
-        end
+        end)
         return files
     end
 
