@@ -1,0 +1,229 @@
+* SDWBS Conventions
+
+** Status Markers
+
+   Norg provides a full set of TODO status markers. The SDWBS uses all
+   of them to express different element states:
+
+   - `( )` — /Undone/: not started; no children have started
+   - `(x)` — /Done/: complete; all children are `(x)`, or leaf node is done
+   - `(-)` — /In progress/: at least one child is `(x)` and at least
+     one is `( )` or `(-)`
+   - `(=)` — /On hold/: work paused due to external blocker or reprioritisation
+   - `(_)` — /Cancelled/: scope cut, no longer planned
+   - `(?)` — /Uncertain/: needs further input, clarification, or decision
+   - `(!)` — /Urgent/: high-priority item requiring immediate attention
+
+   Status propagates upward automatically. A parent's status is always
+   derived from its children — never set independently.
+
+   Examples:
+   - If Design `(x)`, Implementation `(x)`, Verification `( )`,
+     Validation `( )` → parent stage is `(-)`
+   - If all four phases are `(x)` → parent stage is `(x)`
+   - If none have started → parent stage is `( )`
+   - If Backend `(x)`, Frontend `(-)`, Mobile `( )` →
+     Implementation is `(-)`
+   - If a feature is descoped → mark it `(_)` cancelled; parent
+     recalculates from remaining active children
+
+
+** Element Type Tags
+
+   Every WBS element carries a type tag in square brackets:
+
+   - `[APP]` — Top-level application or system boundary
+   - `[feature]` — User-facing feature module (follows D/I/V/V lifecycle)
+   - `[infra]` — Infrastructure component (flat, verified by CI tooling)
+   - `[ops]` — Operational concern (CI/CD, monitoring, alerting)
+   - `[lib]` — Shared library or utility (consumed by features)
+   - `[ext]` — External dependency (design handoffs, legal, third-party)
+
+   Tags are placed after the WBS number and before the element name:
+   `** (-) 42.2. [feature] Chat {* 42.2}`
+
+   Infrastructure and ops elements use flat structures — they do not
+   follow the four-phase lifecycle. Shared libraries track their own
+   stages when they have independent release cycles.
+
+
+** Section Patterns — Feature Lifecycle
+
+   Feature modules (`[feature]`) decompose each stage into four phases:
+
+   ~ *Design* — architecture, user stories, data models, flow diagrams
+   ~ *Implementation* — source code, split by platform sub-domain
+   ~ *Verification* — unit tests, integration tests, E2E tests
+   ~ *Validation* — QA scenarios, acceptance scripts, sign-off
+
+   /Individual defects are tracked in the issue tracker; the SDWBS
+   records aggregated counts in the Implementation phase./
+
+
+** Implementation Sub-domains
+
+   Implementation splits into platform sub-domains at one heading level
+   deeper than the phase:
+
+   - *Backend* (BE) — API endpoints, services, data access, business logic
+   - *Frontend* (FE) — Web UI components, state management, API integration
+   - *Mobile* — Native/cross-platform screens, device APIs, offline support
+
+   Not every feature requires all platforms. Omit sub-domains that don't
+   apply (e.g. a backend-only migration has no FE or Mobile section).
+
+   Verification and Validation remain unified — they reference
+   platform-specific test suites in bullets but do not split into
+   sub-headings.
+
+   Example:
+   @code norg
+   **** (x) 42.1.1.2. Implementation {* 42.1.1.2}
+   ***** (x) 42.1.1.2.1. Backend {* 42.1.1.2.1}
+         - (x) User registration endpoint with email verification
+         - (x) Password hashing service
+   ***** (x) 42.1.1.2.2. Frontend {* 42.1.1.2.2}
+         - (x) Registration form with real-time validation
+   ***** (x) 42.1.1.2.3. Mobile {* 42.1.1.2.3}
+         - (x) Registration screen with biometric option
+   @end
+
+
+** Task Items & Acceptance Criteria
+
+   Tasks are status-marked bullets under each platform sub-domain.
+   Acceptance criteria (AC) are optional nested sub-bullets that define
+   "done" for each task:
+
+   @code norg
+   - (x) User registration endpoint with email verification
+     - AC: returns 201 + sends verification email within 5s
+     - AC: 409 on duplicate email with descriptive error
+     - AC: rate-limited to 3 requests/min per IP
+   @end
+
+   Guidelines:
+   - 3–6 tasks per platform sub-domain per stage
+   - AC lines on tasks with non-obvious completion criteria
+   - Simple tasks can omit AC (single descriptive line is enough)
+   - Bug fixes may be aggregated: "Bug fixes (N items)"
+
+
+** Stage Naming
+
+   - `Stage 1` through `Stage N` — planned and committed release scopes
+   - `Future` — aspirational items not yet scheduled for any stage
+
+   Stages are not strict waterfall gates. Individual modules may complete
+   their stage work independently — infrastructure often leads features.
+
+   Not every module requires work in every stage. When a module has no
+   deliverables for a given stage, the stage number is simply skipped
+   (e.g. a module may have Stage 1 and Stage 3 with no Stage 2 entry).
+
+
+** Numbering Context
+
+   A project's WBS number can start at any value (e.g. `42.` instead of
+   `1.`). This supports embedding the SDWBS within a larger organisational
+   WBS where the project is one node in a programme-level tree.
+
+
+** Companion Files
+
+   When a module spans multiple stages with significant detail, its
+   content moves to a companion file named after its WBS number
+   (e.g. `42.1. Authentication.norg`). The parent file retains a summary
+   with a cross-reference.
+
+   Criteria for splitting:
+   - Module has 2+ stages with non-trivial Implementation detail
+   - Inline expansion would exceed ~80 lines in the parent file
+   - Module is frequently updated independently
+
+
+** Cross-references
+
+   WBS elements use anchors `{* 42.1.2}` for dependency tracking.
+   Pre-requisites list forward dependencies (what this element needs).
+   Reverse dependencies (what depends on this element) are navigable
+   via editor tooling (e.g. norg backlink navigation).
+
+
+** Ownership
+
+   Each feature or module may include an `Owner:` field in its
+   description (e.g. `Owner: @backend-team`). This identifies the
+   responsible team but does not replace the ticket tracker for
+   individual assignment.
+
+   The SDWBS tracks *work scope*, not people. Sprint assignment,
+   individual task ownership, and capacity planning live in the
+   ticket tracker.
+
+   Per-owner filtered views (e.g. `@backend-team.norg`) can be
+   generated to show each team's slice of the WBS tree.
+
+
+** Extra Fields
+
+   Nodes may carry additional metadata fields as plain-text lines
+   in their description:
+
+   - `Owner:` — responsible team or individual (e.g. `Owner: @backend-team`)
+   - `Effort:` — T-shirt size estimate (e.g. `Effort: M (2-3 sprints)`)
+   - `Outcome:` — measurable success criteria, placed in the Validation
+     phase (e.g. `Outcome: signup conversion >60%`)
+
+   These fields are informational and do not affect status propagation.
+   They exist to provide context for project planning and reporting.
+
+
+** External Dependencies
+
+   External blockers (design handoffs, legal reviews, third-party
+   approvals) are tracked as their own WBS subtree using the `[ext]`
+   element type tag. Features reference external dependency nodes in
+   their pre-requisites — when the external node reaches `(x)`, the
+   dependent feature can proceed.
+
+   Example:
+   @code norg
+   ** (-) 42.11. [ext] External Dependencies {* 42.11}
+   *** (x) 42.11.1. Design Handoff — Authentication {* 42.11.1}
+   *** (-) 42.11.3. Design Handoff — Notes {* 42.11.3}
+   @end
+
+   Referenced from a feature:
+   @code norg
+   Pre-requisites:
+   - (-) {* 42.11.3} Design Handoff — Notes Stage 3 specs
+   @end
+
+
+** Filtered Views
+
+   The SDWBS supports multiple /view files/ — projections of the same
+   data filtered by different criteria. These are separate `.norg` files
+   that reference the main WBS via anchors (`{* X.Y}`):
+
+   - `critical-path.norg` — only blocking chains and their downstream impact
+   - `@team-name.norg` — filtered tree showing one team's owned nodes
+   - Per-stage views, per-status views, etc.
+
+   View files are derived artifacts. They can be manually maintained or
+   script-generated from the canonical WBS files. They link back to
+   source nodes and do not duplicate content.
+
+
+** Scaling
+
+   The SDWBS scales by splitting nodes into companion files. Any node
+   can be extracted into its own file when it grows beyond ~80 lines.
+   Companion files can themselves reference further companion files,
+   creating an arbitrarily deep file tree while keeping each individual
+   file navigable.
+
+   For large projects (20+ features), consider grouping features under
+   sub-apps or domains at level 2 (e.g. `42.A. [domain] Collaboration`
+   containing Chat, Notes, and Sharing).

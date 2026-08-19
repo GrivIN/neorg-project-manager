@@ -1,0 +1,163 @@
+* (-) 42.4. [feature] Notifications {* 42.4}
+
+  Push notifications for real-time events and scheduled email digests
+  for activity summaries. Pluggable delivery channels with per-user
+  preference management.
+
+  Pre-requisites:
+  - (x) {* 42.1} Authentication — user identity and push token registration
+  - (x) {* 42.6.6} Message Queue — async notification dispatch
+  - (x) {* 42.6.7} Secrets — push provider credentials (APNs, FCM)
+
+
+** (-) 42.4.1. Stage 1 — Push Notifications {* 42.4.1}
+
+*** (x) 42.4.1.1. Design {* 42.4.1.1}
+    User stories:
+    - /As a user, I want to receive push notifications for new messages,
+      shared notes, and account events, so that I stay informed without
+      checking the app constantly./
+    - /As a user, I want to control which notifications I receive and
+      how, so that I'm not overwhelmed by alerts I don't care about./
+
+    Artifacts:
+    - Notification event taxonomy (message, share, mention, system, security)
+    - Delivery architecture: event → queue → dispatcher → provider (APNs/FCM)
+    - Database schema: `push_tokens`, `notification_preferences`,
+      `notification_log` tables
+
+*** (-) 42.4.1.2. Implementation {* 42.4.1.2}
+
+**** (x) 42.4.1.2.1. Backend {* 42.4.1.2.1}
+     - (x) Push token registration and lifecycle management
+       - AC: stores device token + platform (iOS/Android) per user
+       - AC: deregisters stale tokens on provider feedback (invalid/expired)
+       - AC: user can have multiple active tokens (multiple devices)
+     - (x) Notification dispatcher with channel routing
+       - AC: consumes events from SQS; routes to APNs or FCM based on token
+       - AC: retries with exponential backoff (3 attempts, 1s/5s/30s)
+       - AC: dead-letter queue for permanently failed deliveries
+     - (x) Notification event API (internal, service-to-service)
+       - AC: accepts event type, recipient user ID, payload, and priority
+       - AC: high-priority events bypass batching; normal events may batch
+     - (x) User preference management endpoints
+       - AC: per-category toggle (messages, shares, mentions, system)
+       - AC: quiet hours setting (start/end time + timezone)
+       - AC: preferences checked before dispatch; suppressed events logged
+     - (x) Notification log with read/unread tracking
+       - AC: persists all dispatched notifications for 90 days
+       - AC: mark-as-read endpoint (single and bulk)
+       - AC: unread count endpoint for badge display
+     - (x) Rate limiting and deduplication
+       - AC: max 30 notifications/min per user (burst protection)
+       - AC: duplicate detection within 60s window (same event type + target)
+
+**** (x) 42.4.1.2.2. Frontend {* 42.4.1.2.2}
+     - (x) Notification centre dropdown with grouped events
+       - AC: grouped by date (Today, Yesterday, Earlier)
+       - AC: unread items visually distinct; click marks as read
+       - AC: "Mark all as read" action in header
+     - (x) Notification badge on navigation (bell icon)
+       - AC: shows unread count; updates in real-time via WebSocket
+       - AC: badge disappears when count reaches 0
+     - (x) Browser push notification permission flow
+       - AC: prompt shown after first meaningful action (not on page load)
+       - AC: "Not now" delays re-prompt for 7 days
+       - AC: denied state shows in-app notification centre only
+     - (x) Notification preference settings page
+       - AC: toggle per category; quiet hours with time pickers
+       - AC: test notification button to verify delivery
+     - (x) Click-through routing from notification to source content
+       - AC: clicking a message notification opens that conversation
+       - AC: clicking a share notification opens the shared note
+
+**** (-) 42.4.1.2.3. Mobile {* 42.4.1.2.3}
+     - (x) Push token registration on app launch
+       - AC: requests notification permission on first launch
+       - AC: registers token with backend; refreshes on token change
+     - (x) Notification payload handling (foreground + background)
+       - AC: foreground: in-app banner (not system notification)
+       - AC: background: system notification with sound and badge
+     - (-) Rich notification content (image preview, action buttons)
+       - AC: message notifications show sender avatar
+       - AC: action buttons: Reply, Mark as Read (without opening app)
+       - AC: notification grouping per conversation (iOS) / channel (Android)
+     - ( ) Notification preference screen (native)
+       - AC: mirrors web settings; syncs via API on save
+       - AC: links to system notification settings for channel control
+     - ( ) Notification history screen
+       - AC: scrollable list of past notifications with read/unread state
+       - AC: swipe to dismiss individual notifications
+
+*** (-) 42.4.1.3. Verification {* 42.4.1.3}
+    - (x) Backend: 7 test suites (token lifecycle, dispatcher, routing,
+          preferences, rate limiting, dedup, notification log)
+    - (x) Frontend: 5 test suites (notification centre, badge, browser push,
+          preferences, click-through routing)
+    - (-) Mobile: 2 of 5 suites completed (token registration, payload
+          handling; pending: rich content, preferences, history)
+    - ( ) Integration: E2E notification flow — trigger event → dispatch
+          → receive on web and mobile
+
+*** ( ) 42.4.1.4. Validation {* 42.4.1.4}
+    - ( ) QA scenarios: delivery across providers, preference suppression,
+          quiet hours, rate limiting, deduplication
+    - ( ) Performance: dispatch latency <3s from event to device delivery
+    - ( ) Cross-platform: notification state synced (read on web =
+          badge cleared on mobile)
+
+
+** ( ) 42.4.2. Stage 2 — Email Digests {* 42.4.2}
+
+*** ( ) 42.4.2.1. Design {* 42.4.2.1}
+    User stories:
+    - /As a user, I want to receive a daily or weekly email summary of
+      activity I missed, so that I stay informed even when I'm away from
+      the app for extended periods./
+
+    Pre-requisites:
+    - (x) {* 42.4.1} Stage 1 — Push Notifications (preference system)
+    - ( ) {* 42.6.8} CDN — email asset hosting (images, styles)
+
+*** ( ) 42.4.2.2. Implementation {* 42.4.2.2}
+
+**** ( ) 42.4.2.2.1. Backend {* 42.4.2.2.1}
+     - ( ) Digest scheduler (daily at user's preferred time, weekly on Monday)
+       - AC: scheduled via cron; skips users with no unread activity
+       - AC: respects user timezone for delivery time
+     - ( ) Activity aggregation service
+       - AC: collects unread messages, new shares, mentions since last digest
+       - AC: groups by source (chat, notes, system) with counts and previews
+     - ( ) Email template engine with responsive HTML
+       - AC: renders with user name, activity sections, action links
+       - AC: plain-text fallback for email clients without HTML support
+     - ( ) Digest preference endpoints (frequency, enabled/disabled)
+       - AC: options: daily, weekly, disabled; defaults to weekly
+     - ( ) Unsubscribe flow (one-click from email footer)
+       - AC: unsubscribe link disables digest without requiring login
+       - AC: re-enable available from notification settings page
+
+**** ( ) 42.4.2.2.2. Frontend {* 42.4.2.2.2}
+     - ( ) Digest preference controls on notification settings page
+       - AC: frequency dropdown (daily/weekly/disabled)
+       - AC: preferred delivery time picker (for daily digest)
+     - ( ) Digest preview ("see what your next digest will look like")
+       - AC: renders sample digest in modal using current activity data
+
+**** ( ) 42.4.2.2.3. Mobile {* 42.4.2.2.3}
+     - ( ) Digest preference controls on notification settings screen
+       - AC: mirrors web settings; syncs on save
+     - ( ) Deep link handling from digest email links
+       - AC: tapping activity link in email opens relevant screen in app
+       - AC: falls back to web if app not installed
+
+*** ( ) 42.4.2.3. Verification {* 42.4.2.3}
+    - ( ) Backend: scheduler, aggregation, template rendering, unsubscribe
+    - ( ) Frontend: preference controls, preview rendering
+    - ( ) Mobile: preferences, deep link handling
+    - ( ) Integration: digest generation → email delivery → link click-through
+
+*** ( ) 42.4.2.4. Validation {* 42.4.2.4}
+    - ( ) QA scenarios: daily/weekly generation, timezone handling,
+          unsubscribe, re-enable, empty-activity skip
+    - ( ) Email rendering: verified across Gmail, Outlook, Apple Mail

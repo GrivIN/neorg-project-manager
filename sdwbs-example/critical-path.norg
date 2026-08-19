@@ -1,0 +1,92 @@
+* Critical Path — Blocking Chains
+
+  /Filtered view of the SDWBS showing only items that are blocking other
+  work. Each entry links back to its full WBS node via anchor reference./
+
+  /Generated from: `42. ACME App.norg` and companion files./
+  /Last updated: manually maintained or script-generated from status markers./
+
+
+** Chat Stage 2 — Group Chat & Attachments
+
+   {* 42.2.2} is `(-)` in progress. Blocked by:
+
+   ~ {* 42.6.8} CDN — cache invalidation automation `(-)`
+     Blocks: attachment delivery performance for group media sharing
+   ~ {* 42.11.2} Design Handoff — Chat Stage 2 `(-)`
+     Blocks: Frontend and Mobile implementation (no final designs for
+     attachment viewer and group creation flow)
+
+   Downstream impact:
+   - Chat Stage 2 Validation cannot start until FE and Mobile catch up
+   - Mobile hasn't started — needs designs AND CDN signed URLs
+
+
+** Notes Stage 3 — Polished
+
+   {* 42.3.3} is `(-)` in progress. Blocked by:
+
+   ~ {* 42.11.3} Design Handoff — Notes Stage 3 `(-)`
+     Blocks: pixel-perfect specs not yet delivered for responsive layouts
+   ~ Frontend accessibility audit `( )` — pending, no external blocker
+   ~ Mobile accessibility (VoiceOver/TalkBack) `( )` — pending
+
+   Downstream impact:
+   - Notes Stage 4 (collaborative editing) cannot start until Stage 3
+     is complete (stable, accessible UI required as foundation)
+
+
+** Notifications Stage 1 — Push Notifications
+
+   {* 42.4.1} is `(-)` in progress. Blocked by:
+
+   ~ {* 42.11.5} Legal — Privacy Policy Review `(=)` on hold
+     Blocks: Stage 1 Validation sign-off (cannot ship without legal approval)
+   ~ Mobile: rich notification content `(-)` and preference screen `( )`
+     Blocks: Stage 1 Verification (mobile test suites incomplete)
+
+   Downstream impact:
+   - Notifications Stage 2 (email digests) cannot start until Stage 1 ships
+   - Notes sharing notifications rely on Notifications Stage 1 Mobile
+
+
+** API Client SDK
+
+   {* 42.8.1} is `(-)` in progress. Blocked by:
+
+   ~ All backend feature endpoints must be finalised before SDK covers 100%
+   ~ Chat Stage 2 Backend `(x)` — now covered
+   ~ Notifications Stage 2 Backend `( )` — not yet started
+
+   Downstream impact:
+   - {* 42.5} Dashboard depends on SDK for typed API calls
+   - {* 42.5.3} Custom Report Builder is `(=)` on hold waiting for SDK
+
+
+** CDN — Content Delivery Network
+
+   {* 42.6.8} is `(-)` in progress.
+
+   ~ Cache invalidation automation `(-)` — implementation in progress
+   ~ Signed URL generation for private content `( )` — not started
+
+   Downstream impact:
+   - {* 42.2.2} Chat Stage 2 — attachment delivery
+   - {* 42.4.2} Notifications Stage 2 — email asset hosting
+
+
+** Summary: Critical Chain
+
+   @code
+   Legal Review (=) ──────────────► Notifications Validation
+                                          │
+   Design Handoff Chat (-) ──► Chat FE/Mobile ──► Chat Validation
+                                          │
+   CDN (-) ────────────────────► Chat attachments
+      │
+      └──────────────────────────► Notification emails
+                                          │
+   Design Handoff Notes (-) ──► Notes FE Stage 3 ──► Notes Stage 4
+                                          │
+   SDK (-) ──────────────────────► Dashboard
+   @end

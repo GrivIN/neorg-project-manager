@@ -4,11 +4,12 @@
 local cfg = require("neorg-project-manager.config")
 local index = require("neorg-project-manager.index")
 
--- Setup test files
+-- Setup test files (new-style: root-level numbered file as project marker)
 local root = "/tmp/test_pm_index"
 vim.fn.delete(root, "rf")
 vim.fn.mkdir(root, "p")
-vim.fn.writefile({ "" }, root .. "/project.norg")
+-- Root status file (depth-1 prefix)
+vim.fn.writefile({ "* (-) 1. Test Project {* 1}" }, root .. "/1. Test Project.norg")
 vim.fn.writefile({
     "* (x) 1.1.1.1. Setup Complete",
     "  All done.",

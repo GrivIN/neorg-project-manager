@@ -156,7 +156,7 @@ M.defaults = {
     cross_file = true,
 
     --- Project root detection.
-    --- nil = auto-detect by looking for project.norg in ancestor directories.
+    --- nil = auto-detect by looking for a root-level numbered file in ancestor directories.
     --- string = explicit absolute path to project root.
     --- function(filepath) → string|nil = custom detection logic.
     project_root = nil,
@@ -166,10 +166,6 @@ M.defaults = {
     --- string = use this fixed prefix for all files.
     --- function(filepath) → string|nil = custom extraction logic.
     file_prefix = nil,
-
-    --- Lazy index: pre-index all project files on idle timer.
-    --- When false (default), files are only parsed when referenced.
-    preindex_on_idle = false,
 
     --- Rename confirmation threshold.
     --- If the number of file/dir renames exceeds this, a confirmation prompt is shown.
@@ -269,15 +265,12 @@ function M.setup(opts)
             group = vim.api.nvim_create_augroup("NeorgPM_CrossFile", { clear = true }),
             callback = function(ev)
                 local filepath = vim.api.nvim_buf_get_name(ev.buf)
-                local filename = vim.fn.fnamemodify(filepath, ":t")
 
                 -- Invalidate project index cache for this file
                 idx.invalidate(filepath)
 
-                -- Auto-update parent index.norg if this is a content file (not index/project)
-                if filename ~= "index.norg" and filename ~= "project.norg" then
-                    M.auto_update_parent_index(filepath)
-                end
+                -- Auto-update status files (circular prevention is inside the function)
+                M.auto_update_parent_index(filepath)
             end,
         })
     end
@@ -302,7 +295,7 @@ function M.setup(opts)
         rename.renumber_project(buf)
     end, { desc = "Renumber all project files/dirs and update all links" })
 
-    --- Regenerate status content in current buffer (project.norg or index.norg).
+    --- Regenerate status content in current buffer (status file).
     --- Uses surgical update on populated files; full generation on empty files.
     --- Warns if the buffer has unsaved changes (full generation would overwrite them).
     vim.api.nvim_create_user_command("NeorgPMStatus", function()
@@ -326,9 +319,9 @@ function M.setup(opts)
         else
             status.update(buf)
         end
-    end, { desc = "Update status in current project.norg/index.norg (preserves manual content)" })
+    end, { desc = "Update status in current status file (preserves manual content)" })
 
-    --- Regenerate ALL index.norg + project.norg files in the project.
+    --- Regenerate ALL status files in the project.
     vim.api.nvim_create_user_command("NeorgPMStatusAll", function()
         local buf = vim.api.nvim_get_current_buf()
         local filepath = vim.api.nvim_buf_get_name(buf)
@@ -339,9 +332,9 @@ function M.setup(opts)
         else
             vim.notify("No project root found.", vim.log.levels.ERROR)
         end
-    end, { desc = "Regenerate ALL index.norg + project.norg in the project" })
+    end, { desc = "Regenerate ALL status files in the project" })
 
-    --- Toggle fold (collapse/expand) a tree element in project.norg/index.norg.
+    --- Toggle fold (collapse/expand) a tree element in status files.
     --- Hides body/description content while keeping all headings visible.
     vim.api.nvim_create_user_command("NeorgPMToggle", function()
         local buf = vim.api.nvim_get_current_buf()
@@ -354,11 +347,11 @@ function M.setup(opts)
         fold.toggle_all(buf)
     end, { desc = "Toggle full fold (collapse/expand heading with all children)" })
 
-    --- Extract a .norg file into a directory with separate files per heading.
+    --- Extract a heading into its own .norg file.
     vim.api.nvim_create_user_command("NeorgPMExtract", function()
         local buf = vim.api.nvim_get_current_buf()
         extract.extract(buf)
-    end, { desc = "Extract file headings into a directory structure" })
+    end, { desc = "Extract heading into its own file" })
 end
 
 --- Attach the plugin to a norg buffer.
@@ -410,7 +403,7 @@ function M.attach(buf)
         vim.keymap.set("n", prefix .. "T", "<cmd>NeorgPMToggleAll<CR>",
             { buffer = buf, desc = "Toggle full fold (collapse all)" })
         vim.keymap.set("n", prefix .. "e", "<cmd>NeorgPMExtract<CR>",
-            { buffer = buf, desc = "Extract to directory" })
+            { buffer = buf, desc = "Extract heading to file" })
     end
 
     -- Fire User event for extensibility
@@ -430,12 +423,24 @@ function M.attach(buf)
 
     --- Check if auto-renumbering should run for this buffer.
     --- Only renumbers if the file is inside a project OR already has numbered headings.
+    --- Never renumbers status files (their headings are managed, not sequential).
     local function should_auto_renumber()
-        -- Always renumber if inside a project
         local filepath = vim.api.nvim_buf_get_name(buf)
-        if filepath ~= "" and project.find_root(filepath) then
+        if filepath == "" then
+            return false
+        end
+
+        -- Never auto-renumber status files — their headings represent managed
+        -- entries from companion files, not sequential document structure
+        if project.is_status_file(filepath) then
+            return false
+        end
+
+        -- Renumber if inside a project
+        if project.find_root(filepath) then
             return true
         end
+
         -- Check if the file already has numbered headings (user previously ran :NeorgPMRenumber)
         local lines = vim.api.nvim_buf_get_lines(buf, 0, math.min(20, vim.api.nvim_buf_line_count(buf)), false)
         for _, line in ipairs(lines) do
@@ -569,18 +574,18 @@ function M.refresh_virtual_text(buf)
 
     -- Display mixed-type propagation indicators
     if M.config.mixed_propagation then
-        mixed.refresh(buf, M.ns.mixed, M.config, root)
+        mixed.refresh(buf, M.ns.mixed, root)
     end
 
     -- Display prerequisite tracking indicators
     if M.config.prerequisite_tracking then
-        prereqs.refresh(buf, M.ns.prereqs, M.config, number_index, root)
+        prereqs.refresh(buf, M.ns.prereqs, number_index, root)
     end
 end
 
---- Auto-update the parent directory's index.norg when a content file is saved.
---- Uses surgical update (preserves manual content) or creates the file if missing.
---- Also cascades up to update project.norg.
+--- Auto-update status files when a content file is saved.
+--- Finds and surgically updates the status file for the saved file's directory,
+--- then cascades up to the root status file.
 --- Only operates if the file is within a detected project root.
 ---
 --- @param filepath string  Absolute path to the saved file
@@ -590,32 +595,31 @@ function M.auto_update_parent_index(filepath)
         return
     end
 
+    -- Determine the root status file
+    local root_status_file = project.find_status_file(root)
+
+    -- Prevent circular self-update: if the saved file IS a status file, skip
+    local saved_full = vim.fn.fnamemodify(filepath, ":p")
+    if root_status_file and saved_full == vim.fn.fnamemodify(root_status_file, ":p") then
+        return
+    end
+
     local dir_path = vim.fn.fnamemodify(filepath, ":p:h")
 
-    -- Don't create/update index.norg in the project root — project.norg handles it
-    if dir_path ~= root then
-        local index_path = dir_path .. "/index.norg"
-
-        -- Create or surgically update index.norg
-        if vim.fn.filereadable(index_path) == 0 then
-            -- Create new index.norg with full generation (direct children only)
-            local dir_tree = status.build_directory_tree(dir_path)
-            local idx_lines = status.render_as_norg(dir_tree, { max_depth = 2, base_level = 0 })
-            vim.fn.writefile(idx_lines, index_path)
-        else
-            -- Surgical update: only touch managed headings
-            status.update_file(index_path, dir_path, "index")
+    -- Update subdirectory status file (if file is in a subdirectory, not at root)
+    if vim.fn.fnamemodify(dir_path, ":p") ~= vim.fn.fnamemodify(root, ":p") then
+        local dir_status_file = project.find_status_file(dir_path)
+        -- Skip self-update but DON'T return — still cascade to root
+        if dir_status_file and saved_full ~= vim.fn.fnamemodify(dir_status_file, ":p") then
+            if vim.fn.filereadable(dir_status_file) == 1 then
+                status.update_file(dir_status_file, dir_path, "index")
+            end
         end
     end
 
-    -- Same for project.norg at the root
-    local project_path = root .. "/project.norg"
-    if vim.fn.filereadable(project_path) == 0 then
-        local project_tree = status.build_project_tree(root)
-        local project_lines = status.render_as_norg(project_tree, { max_depth = 6, base_level = 0 })
-        vim.fn.writefile(project_lines, project_path)
-    else
-        status.update_file(project_path, root, "project")
+    -- Update root status file
+    if root_status_file and vim.fn.filereadable(root_status_file) == 1 then
+        status.update_file(root_status_file, root, "project")
     end
 end
 

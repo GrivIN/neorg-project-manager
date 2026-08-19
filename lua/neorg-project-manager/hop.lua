@@ -142,7 +142,7 @@ function M.try_number_hop(buf)
         return true
     end
 
-    -- 3. Try resolving as a directory (open its index.norg)
+    -- 3. Try resolving as a directory (open its status file)
     local project_mod = require("neorg-project-manager.project")
     local filepath = vim.api.nvim_buf_get_name(buf)
     local root = project_mod.find_root(filepath)
@@ -150,10 +150,10 @@ function M.try_number_hop(buf)
         local entries = project_mod.scan(root)
         for _, entry in ipairs(entries) do
             if entry.is_dir and entry.prefix == location_text then
-                local idx_path = entry.filepath .. "/index.norg"
-                if vim.fn.filereadable(idx_path) == 1 then
+                local status_path = project_mod.find_status_file(entry.filepath)
+                if status_path and vim.fn.filereadable(status_path) == 1 then
                     vim.cmd("normal! m`")
-                    vim.cmd("edit " .. vim.fn.fnameescape(idx_path))
+                    vim.cmd("edit " .. vim.fn.fnameescape(status_path))
                     return true
                 end
             end

@@ -90,20 +90,8 @@ local function collect_headings_from_tree(root, content, prefix)
                     num = numbering.format_number(counters, level, prefix)
                 end
 
-                -- Get todo state from detached_modifier_extension
-                local state = nil
-                for child in node:iter_children() do
-                    if child:type() == "detached_modifier_extension" then
-                        for ext_child in child:iter_children() do
-                            local ext_type = ext_child:type()
-                            if ext_type:match("^todo_item_") then
-                                state = ext_type:sub(#"todo_item_" + 1)
-                                break
-                            end
-                        end
-                        break
-                    end
-                end
+                -- Get todo state
+                local state = helpers.get_todo_state(node)
 
                 headings_map[num] = { line = node:start(), level = level, state = state }
 
@@ -246,25 +234,26 @@ function M.get(buf)
                     return { filepath = entry.filepath, line = 0, level = 0, state = nil }
                 end
 
-                -- Fallback: search in status files (project.norg / index.norg)
+                -- Fallback: search in status files for each directory
                 -- Headings that only exist inside status files (not as standalone files)
                 local status_files_to_check = {}
-                local project_file = root .. "/project.norg"
-                if vim.fn.filereadable(project_file) == 1 then
-                    table.insert(status_files_to_check, project_file)
+                local root_status = project.find_status_file(root)
+                if root_status and vim.fn.filereadable(root_status) == 1 then
+                    table.insert(status_files_to_check, root_status)
                 end
-                -- Also check index.norg files in directories found by the scan
-                for _, entry in ipairs(entries) do
-                    if entry.is_dir then
-                        local idx_file = entry.filepath .. "/index.norg"
-                        if vim.fn.filereadable(idx_file) == 1 then
-                            table.insert(status_files_to_check, idx_file)
+                -- Also check status files in directories found by the scan
+                for _, dir_entry in ipairs(entries) do
+                    if dir_entry.is_dir then
+                        local dir_status = project.find_status_file(dir_entry.filepath)
+                        if dir_status and vim.fn.filereadable(dir_status) == 1 then
+                            table.insert(status_files_to_check, dir_status)
                         end
                     end
                 end
 
                 for _, status_file in ipairs(status_files_to_check) do
-                    local headings = get_file_index(status_file, nil)
+                    local status_prefix, _ = project.extract_prefix(vim.fn.fnamemodify(status_file, ":t"))
+                    local headings = get_file_index(status_file, status_prefix)
                     local target_in_status = headings[number_key]
                     if target_in_status then
                         return {

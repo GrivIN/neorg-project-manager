@@ -11,6 +11,7 @@
 
 local M = {}
 
+local config = require("neorg-project-manager.config")
 local helpers = require("neorg-project-manager.helpers")
 
 --- Count todo items among direct children of a heading node.
@@ -151,9 +152,8 @@ end
 ---
 --- @param buf number        Buffer handle
 --- @param ns number         Namespace ID for extmarks
---- @param cfg table         Plugin config
 --- @param root TSNode|nil   Pre-parsed root node (skips re-parsing if provided)
-function M.refresh(buf, ns, cfg, root)
+function M.refresh(buf, ns, root)
     root = root or helpers.get_norg_root(buf)
     if not root then
         return
@@ -195,9 +195,10 @@ function M.refresh(buf, ns, cfg, root)
                 -- - Only for local counts when introspector is NOT active
                 if total > 0 and (is_cross_file or not introspector_active) then
                     local row = node:start()
-                    local text = cfg.mixed_format(done, total)
+                    local format_fn = config.get("mixed_format")
+                    local text = format_fn(done, total)
                     vim.api.nvim_buf_set_extmark(buf, ns, row, 0, {
-                        virt_text = { { " " .. text, cfg.mixed_progress_highlight } },
+                        virt_text = { { " " .. text, config.get("mixed_progress_highlight") } },
                         virt_text_pos = "eol",
                         hl_mode = "combine",
                     })

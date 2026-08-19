@@ -1,0 +1,332 @@
+* (-) 42.3. [feature] Notes {* 42.3}
+
+  Rich-text note creation, search, and sharing — progressing from
+  wireframe prototype through functional implementation to pixel-perfect
+  polish across all platforms.
+
+  Stages:
+  ~ Stage 1 — /Wireframe/: basic CRUD with placeholder UI, proves the data model
+  ~ Stage 2 — /Functional/: full feature set with working UI, no visual polish
+  ~ Stage 3 — /Polished/: pixel-perfect UI, animations, accessibility, performance
+  ~ Stage 4 — /Advanced/: collaboration, version history, templates
+
+  Pre-requisites:
+  - (x) {* 42.1} Authentication — user identity
+  - (x) {* 42.6.3} Database — notes tables
+  - (-) {* 42.8.1} API Client SDK — typed API calls from FE/Mobile
+  - (x) {* 42.8.2} UI Component Library — design system tokens
+
+
+** (x) 42.3.1. Stage 1 — Wireframe {* 42.3.1}
+
+   Minimal viable slice: plain-text notes with CRUD operations and
+   placeholder UI. Goal is to validate the data model, API contract,
+   and end-to-end data flow before investing in rich features or polish.
+
+*** (x) 42.3.1.1. Design {* 42.3.1.1}
+    User story:
+    - /As a developer, I want a working notes CRUD with basic UI on all
+      platforms, so that we can validate the data model and API contract
+      before building rich features./
+
+    Artifacts:
+    - Database schema: `notes` table (id, owner_id, title, body, timestamps)
+    - Low-fidelity wireframes for list and editor screens
+    - API contract: OpenAPI spec for notes endpoints
+
+*** (x) 42.3.1.2. Implementation {* 42.3.1.2}
+
+**** (x) 42.3.1.2.1. Backend {* 42.3.1.2.1}
+     - (x) Notes CRUD API (create, read, update, delete)
+       - AC: returns 201/200/204; validates title length ≤200 chars
+       - AC: soft-delete with 30-day retention before permanent removal
+     - (x) List endpoint with basic pagination
+       - AC: offset-based pagination (limit + offset params)
+       - AC: default sort by updated_at descending
+     - (x) Owner-scoped access (users see only their own notes)
+       - AC: 404 on access to another user's note (no information leak)
+
+**** (x) 42.3.1.2.2. Frontend {* 42.3.1.2.2}
+     - (x) Notes list — plain table with title, date, action buttons
+       - AC: renders all notes; no search or filtering yet
+       - AC: click row opens editor; delete button with confirm dialog
+     - (x) Note editor — single textarea with title input
+       - AC: plain text only; save button; no autosave
+       - AC: unsaved changes warning on navigation (browser beforeunload)
+     - (x) Placeholder layout matching wireframe grid
+       - AC: sidebar + content area; no responsive breakpoints yet
+
+**** (x) 42.3.1.2.3. Mobile {* 42.3.1.2.3}
+     - (x) Notes list screen with flat list
+       - AC: renders title + date; tap opens editor
+       - AC: uses default React Native components (no custom styling)
+     - (x) Note editor screen with text input
+       - AC: title + body fields; keyboard avoidance
+       - AC: save button in navigation header
+     - (x) Navigation wiring (list → editor → back)
+       - AC: stack navigation; back gesture works on iOS
+
+*** (x) 42.3.1.3. Verification {* 42.3.1.3}
+    - Backend: 3 test suites (CRUD operations, pagination, access scoping)
+    - Frontend: 2 test suites (list rendering, editor save/navigate)
+    - Mobile: 2 test suites (list rendering, editor save)
+    - Integration: E2E create → read → update → delete flow
+
+*** (x) 42.3.1.4. Validation {* 42.3.1.4}
+    - (x) Wireframe review with product team — data model approved
+    - (x) REST acceptance scripts for notes API
+    - (x) Basic smoke test on all platforms
+
+
+** (x) 42.3.2. Stage 2 — Functional {* 42.3.2}
+
+   Full feature set: rich-text editing, search, sharing, offline support.
+   UI is functional and usable but uses default component styling — no
+   visual polish, animations, or pixel-perfect alignment.
+
+*** (x) 42.3.2.1. Design {* 42.3.2.1}
+    User stories:
+    - /As a user, I want to format notes with headings, lists, and code
+      blocks, so that my notes are structured and readable./
+    - /As a user, I want to search my notes by keyword and share them
+      with other users, so that I can find and collaborate on content./
+
+    Pre-requisites:
+    - (x) {* 42.3.1} Stage 1 — Wireframe (data model validated)
+    - (-) {* 42.4} Notifications — share notifications (BE/FE ready, Mobile pending)
+    - (x) {* 42.8.4} Migration System — schema changes for search index + sharing
+
+*** (x) 42.3.2.2. Implementation {* 42.3.2.2}
+
+**** (x) 42.3.2.2.1. Backend {* 42.3.2.2.1}
+     - (x) Full-text search with database indexing
+       - AC: results within 200ms for up to 10k notes
+       - AC: supports phrase matching and field-scoped queries (title, body)
+     - (x) Note sharing with permission model (view / edit)
+       - AC: shared users receive notification via {* 42.4}
+       - AC: permissions revocable; owner can transfer ownership
+     - (x) Markdown rendering and HTML sanitisation
+       - AC: strips script tags and event handlers; preserves formatting
+       - AC: rendering happens server-side for consistency across platforms
+     - (x) Upgrade pagination to cursor-based
+       - AC: replaces offset-based; no drift on concurrent inserts
+       - AC: sort by created, updated, or title
+     - (x) Note pinning and archiving
+       - AC: pinned notes appear first in list regardless of sort
+       - AC: archived notes excluded from default list; accessible via filter
+
+**** (x) 42.3.2.2.2. Frontend {* 42.3.2.2.2}
+     - (x) Markdown editor with live preview
+       - AC: split-pane or toggle mode; syntax highlighting in source
+       - AC: toolbar for headings, bold, italic, lists, code, links
+     - (x) Search bar with debounced query and filter controls
+       - AC: 300ms debounce; filters: owned, shared, archived, pinned
+     - (x) Share dialog with user search and permission selector
+       - AC: autocomplete user search; permission dropdown (view/edit)
+     - (x) Keyboard shortcuts for common actions
+       - AC: Ctrl+S save, Ctrl+N new note, Ctrl+/ toggle preview
+     - (x) Autosave with conflict detection
+       - AC: saves 3s after last keystroke; conflict banner if server
+             version diverges; offers merge or overwrite
+     - (x) Pin and archive actions on note list items
+       - AC: icon buttons on hover; visual indicator for pinned notes
+
+**** (x) 42.3.2.2.3. Mobile {* 42.3.2.2.3}
+     - (x) Rich-text toolbar above keyboard
+       - AC: floating toolbar with bold, italic, heading, list, code
+       - AC: toolbar scrolls horizontally if items exceed screen width
+     - (x) Offline note creation with sync queue
+       - AC: notes created offline stored in local SQLite
+       - AC: sync on reconnect; last-write-wins with manual override
+     - (x) Pull-to-refresh on notes list
+       - AC: loading indicator; list updates without scroll position reset
+     - (x) Share via native share sheet
+       - AC: generates share link; deep link opens note in app
+     - (x) Swipe actions (pin, archive, delete)
+       - AC: swipe-right to pin/unpin; swipe-left for archive/delete
+       - AC: undo toast visible for 5s
+
+*** (x) 42.3.2.3. Verification {* 42.3.2.3}
+    - Backend: 6 test suites (search, sharing, permissions, pagination,
+      rendering, pin/archive)
+    - Frontend: 6 test suites (editor, search, share dialog, shortcuts,
+      autosave, conflict handling)
+    - Mobile: 5 test suites (rich toolbar, offline sync, share, swipe,
+      pull-to-refresh)
+    - Integration: E2E note lifecycle including search, share, offline sync
+
+*** (x) 42.3.2.4. Validation {* 42.3.2.4}
+    - (x) 6 QA test scenarios (create, search, share, offline, conflict,
+          pin/archive)
+    - (x) REST acceptance scripts for all notes endpoints
+    - (x) Cross-platform sync verification (web ↔ mobile)
+
+
+** (-) 42.3.3. Stage 3 — Polished {* 42.3.3}
+
+   Pixel-perfect UI aligned to design system, micro-interactions,
+   transitions, accessibility audit, and performance optimisation. No new
+   features — only refinement of everything built in Stage 2.
+
+   /Scope driven by: QA feedback from Stage 2 validation, revised design
+   specs from design team, and accessibility audit findings./
+
+*** (x) 42.3.3.1. Design {* 42.3.3.1}
+    User stories:
+    - /As a user, I want the notes experience to feel fast, smooth, and
+      visually polished, so that the app feels professional and pleasant
+      to use daily./
+    - /As a user with accessibility needs, I want notes to be fully
+      navigable with keyboard and screen reader, so that I can use the
+      app without barriers./
+
+    Artifacts:
+    - High-fidelity mockups from design team (Figma)
+    - Animation spec: transitions, loading skeletons, micro-interactions
+    - Accessibility audit checklist (WCAG 2.1 AA)
+
+*** (-) 42.3.3.2. Implementation {* 42.3.3.2}
+
+**** (x) 42.3.3.2.1. Backend {* 42.3.3.2.1}
+     - (x) Response time optimisation on list and search endpoints
+       - AC: P95 <150ms for list (100 notes); P95 <200ms for search
+       - AC: database query plans reviewed; indices verified
+     - (x) Thumbnail generation for note preview cards
+       - AC: first 3 lines of body rendered as plain-text preview
+       - AC: preview cached; invalidated on note update
+     - (x) ETags for conditional requests (cache validation)
+       - AC: 304 Not Modified on unchanged content; reduces payload
+
+**** (-) 42.3.3.2.2. Frontend {* 42.3.3.2.2}
+     - (x) Design system token alignment (colours, spacing, typography)
+       - AC: all hardcoded values replaced with {* 42.8.2} tokens
+       - AC: dark mode support via token layer (no manual overrides)
+     - (x) Loading skeletons for list and editor
+       - AC: skeleton matches final layout dimensions; no layout shift
+       - AC: shown for >200ms to avoid flash
+     - (x) Transition animations (page enter/exit, list reorder)
+       - AC: 200ms ease-out for page transitions
+       - AC: list items animate on reorder (pin/unpin), add, remove
+     - (-) Responsive breakpoints (desktop, tablet, mobile web)
+       - AC: 3-column on desktop (sidebar + list + editor)
+       - AC: 2-column on tablet (list + editor)
+       - AC: single-column on mobile web (stack with back navigation)
+     - ( ) Accessibility audit and remediation
+       - AC: all interactive elements keyboard-navigable (tab order)
+       - AC: ARIA labels on icon-only buttons; live regions for toasts
+       - AC: colour contrast ratio ≥4.5:1 on all text
+       - AC: screen reader announces note content structure (headings)
+     - ( ) Performance: bundle size and render optimisation
+       - AC: editor lazy-loaded (not in initial bundle)
+       - AC: list virtualised for >100 notes (no DOM bloat)
+       - AC: Lighthouse performance score ≥90
+
+**** (-) 42.3.3.2.3. Mobile {* 42.3.3.2.3}
+     - (x) Design system alignment (native components match Figma specs)
+       - AC: font sizes, colours, spacing match design tokens
+       - AC: platform-specific adjustments (iOS vs Android) documented
+     - (x) Haptic feedback on key interactions
+       - AC: light tap on save; subtle pulse on pin/unpin
+       - AC: error haptic on validation failure
+     - (-) Smooth transitions and gesture animations
+       - AC: swipe-to-archive uses spring physics animation
+       - AC: editor open/close: shared element transition on note title
+       - AC: keyboard appearance doesn't cause layout jump
+     - ( ) Accessibility: VoiceOver (iOS) and TalkBack (Android)
+       - AC: all screens navigable with screen reader
+       - AC: custom actions announced (swipe actions, toolbar buttons)
+       - AC: dynamic type / font scaling support (up to 200%)
+     - ( ) Performance: startup time and scroll performance
+       - AC: notes list renders first frame <500ms from navigation
+       - AC: scroll at 60fps with 500+ notes (FlatList optimisation)
+       - AC: memory usage stable during extended editing sessions
+
+*** (-) 42.3.3.3. Verification {* 42.3.3.3}
+    - (x) Backend: performance benchmark suite (latency, cache hit rate)
+    - (-) Frontend: 3 of 5 suites completed (tokens, skeletons, transitions;
+          pending: accessibility, performance)
+    - (-) Mobile: 2 of 4 suites completed (design alignment, haptics;
+          pending: accessibility, performance)
+    - ( ) Accessibility: automated axe-core scan + manual screen reader test
+    - ( ) Performance: Lighthouse CI gate + mobile profiling
+
+*** ( ) 42.3.3.4. Validation {* 42.3.3.4}
+    - ( ) Design review: pixel-perfect comparison against Figma (all screens)
+    - ( ) Accessibility: WCAG 2.1 AA compliance sign-off
+    - ( ) Performance: P95 load time <1s web, <500ms first frame mobile
+    - ( ) Cross-platform: visual consistency check (web, iOS, Android)
+
+
+** ( ) 42.3.4. Stage 4 — Advanced {* 42.3.4}
+
+   Collaborative editing, version history, and note templates. Builds on
+   the polished foundation from Stage 3.
+
+*** ( ) 42.3.4.1. Design {* 42.3.4.1}
+    User stories:
+    - /As a team member, I want to edit a note simultaneously with
+      colleagues and see their cursors in real time, so that we can
+      collaborate without version conflicts./
+    - /As a user, I want to view the history of changes to a note and
+      restore a previous version, so that I can recover from accidental
+      edits or deletions./
+    - /As a user, I want to create notes from templates (meeting notes,
+      project brief, checklist), so that I can start with a useful
+      structure instead of a blank page./
+
+    Pre-requisites:
+    - (x) {* 42.3.3} Stage 3 — Polished (stable, accessible UI)
+
+*** ( ) 42.3.4.2. Implementation {* 42.3.4.2}
+
+**** ( ) 42.3.4.2.1. Backend {* 42.3.4.2.1}
+     - ( ) Operational transform (OT) or CRDT engine for concurrent editing
+       - AC: concurrent edits from 2+ users merge without data loss
+       - AC: cursor positions broadcast to all participants via WebSocket
+     - ( ) Version history with diff generation
+       - AC: stores snapshots on save (debounced, max 1 per minute)
+       - AC: diff endpoint returns inline additions/deletions between versions
+       - AC: restore endpoint creates new version from historical snapshot
+     - ( ) Template CRUD API
+       - AC: system templates (read-only) + user-created templates
+       - AC: "create from template" duplicates content into new note
+     - ( ) Concurrent editor presence (who is viewing/editing)
+       - AC: presence shown as avatar pills at top of note
+       - AC: stale presence (no heartbeat for 60s) auto-removed
+
+**** ( ) 42.3.4.2.2. Frontend {* 42.3.4.2.2}
+     - ( ) Collaborative cursors and selections in editor
+       - AC: each collaborator shown with coloured cursor and name label
+       - AC: selections highlighted in collaborator's colour
+     - ( ) Version history sidebar with timeline
+       - AC: scrollable list of versions with author, date, summary
+       - AC: click version shows diff; restore button with confirmation
+     - ( ) Template picker on note creation
+       - AC: grid of template cards with preview; search by name
+       - AC: "blank note" always first option
+     - ( ) Presence indicator bar (active editors)
+       - AC: avatar stack at top of editor; tooltip shows full names
+
+**** ( ) 42.3.4.2.3. Mobile {* 42.3.4.2.3}
+     - ( ) Real-time collaborative editing (shared cursor display)
+       - AC: cursors shown as coloured carets; smooth position updates
+     - ( ) Version history screen with restore action
+       - AC: list view; tap to preview version; long-press to restore
+     - ( ) Template selection bottom sheet on new note
+       - AC: scrollable grid; tap to create from template
+     - ( ) Active editors indicator in navigation bar
+       - AC: avatar circles; tap shows full participant list
+
+*** ( ) 42.3.4.3. Verification {* 42.3.4.3}
+    - ( ) Backend: OT/CRDT convergence tests, version history, templates,
+          presence lifecycle
+    - ( ) Frontend: collaborative cursor rendering, diff display, template
+          picker, presence indicator
+    - ( ) Mobile: collaborative editing, version restore, template sheet
+    - ( ) Integration: 3-user concurrent editing across web and mobile
+
+*** ( ) 42.3.4.4. Validation {* 42.3.4.4}
+    - ( ) QA scenarios: concurrent editing conflict resolution, version
+          restore, template creation and use
+    - ( ) Performance: collaborative editing latency <100ms between users
+    - ( ) Stress test: 10 concurrent editors on single note

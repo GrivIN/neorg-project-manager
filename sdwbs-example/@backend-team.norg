@@ -1,0 +1,78 @@
+* @backend-team — Ownership View
+
+  /Filtered view showing all WBS nodes owned by or assigned to
+  \@backend-team. Links back to full nodes via anchor references./
+
+  /Generated from: `42. ACME App.norg` and companion files./
+
+
+** (x) {* 42.1} Authentication
+   Effort: L (4-5 sprints)
+   Status: Complete (Stage 1 + Stage 2)
+
+*** (x) {* 42.1.1} Stage 1 — Signup & Login
+    - (x) User registration endpoint with email verification
+    - (x) Login endpoint with credential validation
+    - (x) Email verification flow
+    - (x) Session management with refresh token rotation
+    - (x) Rate limiting on auth endpoints
+    - (x) Password reset flow
+
+*** (x) {* 42.1.2} Stage 2 — OAuth & Two-Factor
+    - (x) OAuth provider integration (Google, Apple)
+    - (x) TOTP-based two-factor authentication
+    - (x) Backup recovery codes
+    - (x) 2FA enforcement policy
+    - (x) Session upgrade on 2FA completion
+
+
+** (-) {* 42.2} Chat
+   Effort: XL (6-8 sprints) — shared with @frontend-team
+   Status: Stage 1 complete, Stage 2 backend complete
+
+*** (x) {* 42.2.1} Stage 1 — Direct Messaging (Backend)
+    - (x) Conversation creation endpoint
+    - (x) Message send with WebSocket broadcast
+    - (x) Message history with cursor pagination
+    - (x) WebSocket connection manager
+    - (x) Presence service
+    - (x) Read receipt tracking
+
+*** (x) {* 42.2.2} Stage 2 — Group Chat (Backend)
+    - (x) Group conversation CRUD
+    - (x) Message fan-out for group delivery
+    - (x) Attachment upload with pre-signed URLs
+    - (x) Attachment metadata and thumbnail generation
+    - (x) Group admin permissions
+
+
+** (-) {* 42.4} Notifications
+   Effort: M (3-4 sprints)
+   Status: Stage 1 backend complete, Stage 2 not started
+
+*** (x) {* 42.4.1} Stage 1 — Push Notifications (Backend)
+    - (x) Push token registration and lifecycle management
+    - (x) Notification dispatcher with channel routing
+    - (x) Notification event API (service-to-service)
+    - (x) User preference management endpoints
+    - (x) Notification log with read/unread tracking
+    - (x) Rate limiting and deduplication
+
+*** ( ) {* 42.4.2} Stage 2 — Email Digests (Backend)
+    - ( ) Digest scheduler
+    - ( ) Activity aggregation service
+    - ( ) Email template engine
+    - ( ) Digest preference endpoints
+    - ( ) Unsubscribe flow
+
+
+** Summary
+
+   | Feature        | BE Status | Blocking? |
+   | Auth           | (x) Done  | No        |
+   | Chat Stage 2   | (x) Done  | No — FE/Mobile pending |
+   | Notifications  | (-) Stage 1 done, Stage 2 pending | Legal review blocks Validation |
+   | Dashboard      | ( ) Not started | Waiting for SDK |
+
+   Total backend tasks: 28 complete, 5 pending
+   Next priority: Notifications Stage 2 Backend (once legal clears)

@@ -76,10 +76,13 @@ end
 ---------------------------------------------------------------------------
 
 --- Build a status tree for a directory (recursive for state aggregation).
+--- Skips the directory's own status file (the file whose prefix matches
+--- the directory's prefix) to avoid self-referencing entries.
 ---
 --- @param dir_path string
+--- @param skip_file string|nil  Filename to skip (explicit override; if nil, auto-detects)
 --- @return table  StatusNode tree
-function M.build_directory_tree(dir_path)
+function M.build_directory_tree(dir_path, skip_file)
     local entries = {}
 
     local handle = vim.uv.fs_scandir(dir_path)
@@ -87,10 +90,18 @@ function M.build_directory_tree(dir_path)
         return { prefix = nil, title = "Unknown", state = "undone", is_dir = true, children = {}, done = 0, total = 0 }
     end
 
+    -- Determine which file to skip: either explicit or auto-detect the status file
+    local status_file_path = skip_file and (dir_path .. "/" .. skip_file) or project.find_status_file(dir_path)
+    local status_file_name = status_file_path and vim.fn.fnamemodify(status_file_path, ":t") or nil
+
     while true do
         local name, entry_type = vim.uv.fs_scandir_next(handle)
         if not name then break end
-        if name:sub(1, 1) == "." or name == "index.norg" or name == "project.norg" then
+        if name:sub(1, 1) == "." then
+            goto continue
+        end
+        -- Skip the status file for this directory
+        if status_file_name and name == status_file_name then
             goto continue
         end
 
@@ -135,9 +146,10 @@ end
 
 --- Build full project tree.
 --- @param root_path string
+--- @param skip_file string|nil  Filename to skip (e.g., root-level status file)
 --- @return table
-function M.build_project_tree(root_path)
-    local tree = M.build_directory_tree(root_path)
+function M.build_project_tree(root_path, skip_file)
+    local tree = M.build_directory_tree(root_path, skip_file)
     tree.title = vim.fn.fnamemodify(root_path, ":t")
     return tree
 end
@@ -187,13 +199,14 @@ end
 ---
 --- @param scope_path string   Directory to scan
 --- @param scope_type string   "project" (full recursive) or "index" (direct children)
+--- @param skip_file string|nil  Filename to skip (e.g., root-level status file)
 --- @return table              Map of number → entry data
-local function build_entry_states(scope_path, scope_type)
+local function build_entry_states(scope_path, scope_type, skip_file)
     local tree
     if scope_type == "project" then
-        tree = M.build_project_tree(scope_path)
+        tree = M.build_project_tree(scope_path, skip_file)
     else
-        tree = M.build_directory_tree(scope_path)
+        tree = M.build_directory_tree(scope_path, skip_file)
     end
 
     local result = {}
@@ -277,113 +290,17 @@ local function update_managed_line(line, new_state, new_count)
     return updated
 end
 
---- Perform a surgical update of managed headings in a file (on disk).
---- Only updates headings with {* number} links; preserves all other content.
---- Inserts new headings for project entries not yet represented.
+--- Apply status updates to a set of lines (shared algorithm for update_file and update).
+--- Pass 1: Updates managed headings' todo states and progress counts.
+--- Pass 2: Inserts headings for entries not yet represented.
 ---
---- @param filepath string      Path to the .norg file to update
---- @param scope_path string    Directory to scan for project state
+--- @param lines string[]       Lines of norg content
+--- @param entry_states table   Map of number → {state, done, total, title, is_dir}
+--- @param scope_path string    Directory path (for computing heading levels)
 --- @param scope_type string    "project" or "index"
-function M.update_file(filepath, scope_path, scope_type)
-    -- Clear the project entry cache (forces re-scan of directory structure)
-    -- but keep per-file caches (mtime check handles staleness)
-    index.invalidate_project_cache()
-
-    local lines = vim.fn.readfile(filepath)
-    local entry_states = build_entry_states(scope_path, scope_type)
-
-    -- Track which project entries are represented by managed headings
-    local represented = {}
-    local modified = false
-
-    -- Pass 1: Update existing managed headings
-    for i, line in ipairs(lines) do
-        local number = helpers.extract_link_number_from_line(line)
-        if number and entry_states[number] then
-            represented[number] = true
-            local entry = entry_states[number]
-
-            local new_state = state_to_char(entry.state)
-            local new_count = entry.total > 0 and string.format("[%d/%d]", entry.done, entry.total) or nil
-            local updated_line = update_managed_line(line, new_state, new_count)
-
-            if updated_line then
-                lines[i] = updated_line
-                modified = true
-            end
-        end
-    end
-
-    -- Pass 2: Insert headings for unrepresented entries
-    local insertions = {} -- { {after_line_index, text} } (processed in reverse)
-
-    for number, entry in pairs(entry_states) do
-        if not represented[number] then
-            -- Determine heading level from number depth relative to scope
-            local scope_depth = (scope_type == "project") and 0 or helpers.prefix_depth(
-                project.extract_prefix(vim.fn.fnamemodify(scope_path, ":t"))
-            )
-            local entry_depth = helpers.prefix_depth(number)
-            local level = entry_depth - scope_depth
-            if level < 1 then level = 1 end
-            if level > 6 then level = 6 end
-
-            entry.prefix = number
-            local new_line = build_managed_heading_line(entry, level)
-
-            -- Find insertion point: after last managed sibling with lower number
-            local insert_after = #lines -- default: end of file
-            for i, line in ipairs(lines) do
-                local line_number = helpers.extract_link_number_from_line(line)
-                if line_number and line_number < number then
-                    insert_after = i
-                end
-            end
-
-            table.insert(insertions, { pos = insert_after, text = new_line })
-        end
-    end
-
-    -- Sort insertions by position (descending) to insert from bottom up
-    table.sort(insertions, function(a, b) return a.pos > b.pos end)
-    for _, ins in ipairs(insertions) do
-        table.insert(lines, ins.pos + 1, ins.text)
-        modified = true
-    end
-
-    if modified then
-        vim.fn.writefile(lines, filepath)
-    end
-end
-
---- Perform a surgical update on the current buffer (in-memory, not saved).
---- For use with :NeorgPMStatus on a populated file.
----
---- @param buf number  Buffer handle
-function M.update(buf)
-    local filepath = vim.api.nvim_buf_get_name(buf)
-    if filepath == "" then
-        vim.notify("Cannot update status: buffer has no filename", vim.log.levels.WARN)
-        return
-    end
-
-    local filename = vim.fn.fnamemodify(filepath, ":t")
-    local dir_path = vim.fn.fnamemodify(filepath, ":p:h")
-
-    local scope_path, scope_type
-    if filename == "project.norg" then
-        scope_path = dir_path
-        scope_type = "project"
-    elseif filename == "index.norg" then
-        scope_path = dir_path
-        scope_type = "index"
-    else
-        vim.notify("NeorgPMStatus only works in project.norg or index.norg files", vim.log.levels.WARN)
-        return
-    end
-
-    local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
-    local entry_states = build_entry_states(scope_path, scope_type)
+--- @return string[] lines      The (potentially modified) lines
+--- @return boolean modified    Whether any line was changed
+local function apply_status_updates(lines, entry_states, scope_path, scope_type)
     local represented = {}
     local modified = false
 
@@ -410,8 +327,9 @@ function M.update(buf)
 
     for number, entry in pairs(entry_states) do
         if not represented[number] then
-            local scope_prefix = project.extract_prefix(vim.fn.fnamemodify(scope_path, ":t"))
-            local scope_depth = helpers.prefix_depth(scope_prefix)
+            local scope_depth = (scope_type == "project") and 0 or helpers.prefix_depth(
+                project.extract_prefix(vim.fn.fnamemodify(scope_path, ":t"))
+            )
             local entry_depth = helpers.prefix_depth(number)
             local level = entry_depth - scope_depth
             if level < 1 then level = 1 end
@@ -420,6 +338,7 @@ function M.update(buf)
             entry.prefix = number
             local new_line = build_managed_heading_line(entry, level)
 
+            -- Find insertion point: after last managed sibling with lower number
             local insert_after = #lines
             for i, line in ipairs(lines) do
                 local line_number = helpers.extract_link_number_from_line(line)
@@ -438,6 +357,64 @@ function M.update(buf)
         modified = true
     end
 
+    return lines, modified
+end
+
+--- Perform a surgical update of managed headings in a file (on disk).
+--- Only updates headings with {* number} links; preserves all other content.
+--- Inserts new headings for project entries not yet represented.
+---
+--- @param filepath string      Path to the .norg file to update
+--- @param scope_path string    Directory to scan for project state
+--- @param scope_type string    "project" or "index"
+function M.update_file(filepath, scope_path, scope_type)
+    index.invalidate_project_cache()
+
+    local filename = vim.fn.fnamemodify(filepath, ":t")
+    local lines = vim.fn.readfile(filepath)
+    local entry_states = build_entry_states(scope_path, scope_type, filename)
+
+    lines, modified = apply_status_updates(lines, entry_states, scope_path, scope_type)
+
+    if modified then
+        vim.fn.writefile(lines, filepath)
+    end
+end
+
+--- Perform a surgical update on the current buffer (in-memory, not saved).
+--- For use with :NeorgPMStatus on a populated file.
+--- Works on any status file (root-level numbered file or directory-matching file).
+---
+--- @param buf number  Buffer handle
+function M.update(buf)
+    local filepath = vim.api.nvim_buf_get_name(buf)
+    if filepath == "" then
+        vim.notify("Cannot update status: buffer has no filename", vim.log.levels.WARN)
+        return
+    end
+
+    if not project.is_status_file(filepath) then
+        vim.notify("NeorgPMStatus only works on status files (root-level or directory-matching numbered files)", vim.log.levels.WARN)
+        return
+    end
+
+    local filename = vim.fn.fnamemodify(filepath, ":t")
+    local dir_path = vim.fn.fnamemodify(filepath, ":p:h")
+
+    -- Determine scope: root gets full recursive scan, subdirs get direct children
+    local root = project.find_root(filepath)
+    local scope_type
+    if root and vim.fn.fnamemodify(dir_path, ":p") == vim.fn.fnamemodify(root, ":p") then
+        scope_type = "project"
+    else
+        scope_type = "index"
+    end
+
+    local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+    local entry_states = build_entry_states(dir_path, scope_type, filename)
+
+    lines, modified = apply_status_updates(lines, entry_states, dir_path, scope_type)
+
     if modified then
         vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
     end
@@ -448,6 +425,7 @@ end
 ---------------------------------------------------------------------------
 
 --- Generate full status content for an empty buffer.
+--- Works on any status file (root-level or directory-matching).
 ---
 --- @param buf number  Buffer handle
 function M.generate(buf)
@@ -457,19 +435,23 @@ function M.generate(buf)
         return
     end
 
+    if not project.is_status_file(filepath) then
+        vim.notify("NeorgPMStatus only works on status files (root-level or directory-matching numbered files)", vim.log.levels.WARN)
+        return
+    end
+
     local filename = vim.fn.fnamemodify(filepath, ":t")
     local dir_path = vim.fn.fnamemodify(filepath, ":p:h")
-    local tree, render_opts
 
-    if filename == "project.norg" then
-        tree = M.build_project_tree(dir_path)
+    -- Determine scope: root gets full recursive, subdirs get direct children
+    local root = project.find_root(filepath)
+    local tree, render_opts
+    if root and vim.fn.fnamemodify(dir_path, ":p") == vim.fn.fnamemodify(root, ":p") then
+        tree = M.build_project_tree(dir_path, filename)
         render_opts = { max_depth = 6, base_level = 0 }
-    elseif filename == "index.norg" then
-        tree = M.build_directory_tree(dir_path)
-        render_opts = { max_depth = 2, base_level = 0 }
     else
-        vim.notify("NeorgPMStatus only works in project.norg or index.norg files", vim.log.levels.WARN)
-        return
+        tree = M.build_directory_tree(dir_path, filename)
+        render_opts = { max_depth = 2, base_level = 0 }
     end
 
     local norg_lines = M.render_as_norg(tree, render_opts)
@@ -480,23 +462,21 @@ end
 --- REGENERATE ALL (for project-wide renaming)
 ---------------------------------------------------------------------------
 
---- Regenerate all index.norg + project.norg files using surgical updates.
---- Creates files that don't exist; surgically updates those that do.
+--- Regenerate all status files using surgical updates.
+--- Finds and updates status files at root and in each numbered subdirectory.
 ---
 --- @param root_path string  Project root directory
 function M.regenerate_all(root_path)
-    -- Update project.norg
-    local project_file = root_path .. "/project.norg"
-    if vim.fn.filereadable(project_file) == 0 then
-        local tree = M.build_project_tree(root_path)
-        local lines = M.render_as_norg(tree, { max_depth = 6, base_level = 0 })
-        vim.fn.writefile(lines, project_file)
-    else
-        M.update_file(project_file, root_path, "project")
+    -- Update root status file
+    local root_status = project.find_status_file(root_path)
+    if root_status then
+        if vim.fn.filereadable(root_status) == 1 then
+            M.update_file(root_status, root_path, "project")
+        end
     end
 
-    -- Update all index.norg files in subdirectories
-    local function regen_indices(dir_path)
+    -- Update status files in subdirectories
+    local function regen_status_files(dir_path)
         local handle = vim.uv.fs_scandir(dir_path)
         if not handle then return end
 
@@ -509,22 +489,18 @@ function M.regenerate_all(root_path)
                 local sub_path = dir_path .. "/" .. name
                 local prefix, _ = project.extract_prefix(name)
                 if prefix then
-                    local idx_file = sub_path .. "/index.norg"
-                    if vim.fn.filereadable(idx_file) == 0 then
-                        local dir_tree = M.build_directory_tree(sub_path)
-                        local idx_lines = M.render_as_norg(dir_tree, { max_depth = 2, base_level = 0 })
-                        vim.fn.writefile(idx_lines, idx_file)
-                    else
-                        M.update_file(idx_file, sub_path, "index")
+                    local sub_status = project.find_status_file(sub_path)
+                    if sub_status and vim.fn.filereadable(sub_status) == 1 then
+                        M.update_file(sub_status, sub_path, "index")
                     end
                 end
-                regen_indices(sub_path)
+                regen_status_files(sub_path)
             end
             ::continue::
         end
     end
 
-    regen_indices(root_path)
+    regen_status_files(root_path)
 end
 
 return M

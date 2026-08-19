@@ -1,0 +1,364 @@
+* (-) 42. [APP] ACME App
+
+  Internal team workspace for asynchronous collaboration. Combines
+  real-time messaging, shared notes, and activity dashboards into a
+  single platform accessible via web and mobile.
+
+  Tech stack:
+  - Backend: Python / FastAPI / PostgreSQL / Redis
+  - Frontend: TypeScript / React / Next.js
+  - Mobile: TypeScript / React Native (iOS + Android)
+  - Infrastructure: Terraform / AWS (ECS, RDS, ElastiCache, S3, SQS, CloudFront)
+  - CI/CD: GitHub Actions
+
+  Lifecycle per feature stage:
+  ~ *Design* — Architecture, user stories, data models, flow diagrams
+  ~ *Implementation* — Source code split by platform: Backend, Frontend, Mobile
+  ~ *Verification* — Unit tests, integration tests, E2E tests
+  ~ *Validation* — QA scenarios, acceptance scripts, sign-off
+
+  /`[infra]` and `[ops]` elements use flat structures verified by CI
+  tooling, not the four-phase lifecycle./
+
+  /Individual defects are tracked in the issue tracker; the SDWBS records
+  aggregated counts in the Implementation phase./
+
+  Release stages define project-wide milestones. Feature-level stages are
+  independent work packages within each module — they may use scope-based
+  increments (e.g. "Direct Messaging" → "Group Chat") or fidelity-based
+  progression (e.g. "Wireframe" → "Functional" → "Polished"). Feature
+  stages do not need to align 1:1 with release stages.
+
+  - `Stage 1` — MVP: auth, direct messaging, notes, push notifications, core infra
+  - `Stage 2` — Growth: OAuth/2FA, group chat, email digests, CDN, monitoring
+  - /Future/ — Dashboard analytics, collaborative editing, advanced reporting
+
+  /Stages are not strict gates — modules may complete stage work independently./
+
+  /See `README.norg` for full SDWBS conventions./
+
+
+** (x) 42.1. [feature] Authentication {* 42.1}
+
+   Owner: @backend-team, @mobile-team
+   Effort: L (4-5 sprints across 2 stages)
+   Signup, login, OAuth, and two-factor authentication across all platforms.
+
+   /Detailed breakdown in companion file: `42.1. Authentication.norg`/
+
+   Pre-requisites:
+   - (x) {* 42.6.3} Database — user tables
+   - (x) {* 42.6.4} Cache — session store
+   - (x) {* 42.6.7} Secrets — OAuth client credentials
+
+
+** (-) 42.2. [feature] Chat {* 42.2}
+
+   Owner: @backend-team, @frontend-team
+   Effort: XL (6-8 sprints across 2 stages)
+   Real-time messaging — direct and group — with media attachments.
+
+   /Detailed breakdown in companion file: `42.2. Chat.norg`/
+
+   Pre-requisites:
+   - (x) {* 42.1} Authentication — session identity
+   - (x) {* 42.6.6} Message Queue — async delivery
+   - (x) {* 42.6.5} Object Storage — attachment uploads
+
+
+** (-) 42.3. [feature] Notes {* 42.3}
+
+   Owner: @fullstack-team
+   Effort: XL (8-10 sprints across 4 stages)
+   Rich-text note creation, search, and sharing — progressing from
+   wireframe prototype through functional implementation to pixel-perfect
+   polish across all platforms.
+
+   /Detailed breakdown in companion file: `42.3. Notes.norg`/
+
+   Pre-requisites:
+   - (x) {* 42.1} Authentication — user identity
+   - (x) {* 42.6.3} Database — notes tables
+   - (-) {* 42.8.1} API Client SDK — typed API calls from FE/Mobile
+   - (x) {* 42.8.2} UI Component Library — design system tokens
+
+
+** (-) 42.4. [feature] Notifications {* 42.4}
+
+   Owner: @backend-team
+   Effort: M (3-4 sprints across 2 stages)
+   Push notifications and scheduled email digests.
+
+   /Detailed breakdown in companion file: `42.4. Notifications.norg`/
+
+   Pre-requisites:
+   - (x) {* 42.1} Authentication — user identity and push token registration
+   - (x) {* 42.6.6} Message Queue — async notification dispatch
+   - (x) {* 42.6.7} Secrets — push provider credentials
+
+
+** ( ) 42.5. [feature] Dashboard {* 42.5}
+
+   Owner: @frontend-team
+   Effort: M (2-3 sprints)
+   Analytics overview with charts and data export.
+
+*** ( ) 42.5.1. Stage 1 — Analytics Overview {* 42.5.1}
+
+**** ( ) 42.5.1.1. Design {* 42.5.1.1}
+     User story:
+     - /As an administrator, I want an analytics dashboard showing usage
+       trends and key metrics, so that I can make data-driven decisions
+       about the product./
+
+     Pre-requisites:
+     - (x) {* 42.1} Authentication — admin session
+     - (-) {* 42.8.1} API Client SDK — typed API calls
+
+**** ( ) 42.5.1.2. Implementation {* 42.5.1.2}
+
+***** ( ) 42.5.1.2.1. Backend {* 42.5.1.2.1}
+      - ( ) Data aggregation service with date-range filtering
+      - ( ) Time-series API for chart rendering
+      - ( ) Export service (CSV, PDF)
+      - ( ) Query caching layer
+      - ( ) Role-based data scoping
+
+***** ( ) 42.5.1.2.2. Frontend {* 42.5.1.2.2}
+      - ( ) Dashboard layout with responsive grid
+      - ( ) Interactive charts with drill-down
+      - ( ) Date range picker and export dialog
+      - ( ) Real-time data refresh
+
+***** ( ) 42.5.1.2.3. Mobile {* 42.5.1.2.3}
+      - ( ) Summary cards with key metrics
+      - ( ) Chart views with drill-down
+      - ( ) Report sharing via native share sheet
+
+**** ( ) 42.5.1.3. Verification {* 42.5.1.3}
+     /To be defined after Design phase./
+
+**** ( ) 42.5.1.4. Validation {* 42.5.1.4}
+     /To be defined after Design phase./
+
+*** (_) 42.5.2. Stage 2 — Gamification & Leaderboards {* 42.5.2}
+    /Cancelled — descoped after product review. Analytics alone provides
+    sufficient value; gamification deferred indefinitely./
+
+*** (=) 42.5.3. Stage 3 — Custom Report Builder {* 42.5.3}
+    /On hold — blocked by {* 42.8.1} API Client SDK completion. Will resume
+    when SDK covers all analytics endpoints./
+
+    User story:
+    - /As a power user, I want to build custom reports by combining
+      different metrics and filters, so that I can answer ad-hoc questions
+      without engineering support./
+
+
+** (-) 42.6. [infra] Cloud Infrastructure {* 42.6}
+
+   Infrastructure-as-code modules. Each is an atomic component verified
+   by `terraform validate` in CI.
+
+   Environments: `dev` | `staging` | `prod`
+
+*** (x) 42.6.1. `network` — VPC & DNS {* 42.6.1}
+    Three-tier network: public (ALB, NAT, CloudFront), private (compute),
+    database (isolated). DNS records for API and web domains.
+
+*** (x) 42.6.2. `compute` — Container Cluster & Services {* 42.6.2}
+    ECS Fargate cluster with API, worker, and web server task definitions.
+    Pre-requisites:
+    - (x) {* 42.6.1} Network
+    - (x) {* 42.6.7} Secrets — container environment variables
+    - (x) {* 42.6.9} Container Registry
+
+*** (x) 42.6.3. `database` — PostgreSQL {* 42.6.3}
+    RDS PostgreSQL with read replica for analytics queries.
+    Pre-requisites:
+    - (x) {* 42.6.1} Network — database subnet group
+
+*** (x) 42.6.4. `cache` — Redis {* 42.6.4}
+    ElastiCache Redis for session store, rate limiting counters, and
+    real-time presence (chat online status).
+    Pre-requisites:
+    - (x) {* 42.6.1} Network
+
+*** (x) 42.6.5. `storage` — Object Storage {* 42.6.5}
+    S3 buckets for user uploads (avatars, chat attachments, note images)
+    and static asset hosting.
+
+*** (x) 42.6.6. `queue` — Message Queue {* 42.6.6}
+    SQS queues for async notification dispatch and chat message fan-out.
+    Dead-letter queues with alarm integration.
+
+*** (x) 42.6.7. `secrets` — Secrets Manager {* 42.6.7}
+    Database credentials, OAuth client secrets, push provider keys,
+    API signing keys.
+
+*** (-) 42.6.8. `cdn` — Content Delivery Network {* 42.6.8}
+    CloudFront distribution for static assets and media attachments.
+    Pre-requisites:
+    - (x) {* 42.6.5} Storage — origin bucket
+    - (x) {* 42.6.1} Network — DNS alias records
+
+    - (x) Terraform module: distribution, origin, cache policy
+    - (x) DNS alias records for assets subdomain
+    - (-) Cache invalidation automation on deploy
+    - ( ) Signed URL generation for private content
+
+*** (-) 42.6.9. `registry` — Container Registry {* 42.6.9}
+    ECR repositories for API, worker, and web server images.
+
+*** (-) 42.6.10. Monitoring & Alerting {* 42.6.10}
+
+    Pre-requisites:
+    - (x) {* 42.6.2} Compute — log groups
+    - (x) {* 42.6.6} Queue — dead-letter queue metrics
+
+    Alarms (per environment):
+    - API: 5xx rate, 4xx surge, P95/P99 latency, CPU/memory utilisation
+    - Worker: crash patterns, failed invocations, missed schedules
+    - Queue: DLQ depth, oldest message age
+    - Database: connection count, replication lag, storage threshold
+
+
+** (x) 42.7. [ops] CI/CD & Operations {* 42.7}
+
+*** (x) 42.7.1. Stage 1 — Pipeline Setup {* 42.7.1}
+    User story:
+    - /As a developer, I want automated build, test, and deploy pipelines,
+      so that every change is validated before it reaches production./
+
+    Pipeline:
+    - Pull request: parallel lint + unit tests + type check + terraform validate
+    - `main` → dev (auto-deploy)
+
+*** (x) 42.7.2. Stage 2 — Multi-Environment {* 42.7.2}
+    Pre-requisites:
+    - (x) {* 42.7.1} Pipeline Setup
+    - (x) {* 42.6.9} Registry — image push
+
+    Pipeline:
+    - `main` → dev (auto-deploy)
+    - Release candidate tag → staging (manual trigger)
+    - Release tag → production (manual trigger + approval gate)
+
+    - (x) Separate build steps for backend, frontend, mobile
+    - (x) Coverage reporting integrated into PR review
+    - (x) Infrastructure drift detection on schedule
+
+
+** (-) 42.8. [lib] Shared Libraries {* 42.8}
+
+*** (-) 42.8.1. API Client SDK {* 42.8.1}
+    Auto-generated TypeScript client from OpenAPI spec. Used by Frontend
+    and Mobile for typed API calls.
+    - (-) Generated client covers all feature endpoints
+    - (x) Automatic regeneration on spec changes in CI
+    - ( ) Mock server generation for offline frontend development
+
+*** (x) 42.8.2. UI Component Library {* 42.8.2}
+    Shared React components used by Frontend (web) and Mobile
+    (React Native). Design system tokens for colours, spacing, typography.
+    - (x) Core components: Button, Input, Modal, Toast, Avatar, Badge
+    - (x) Form components: TextField, Select, Checkbox, DatePicker
+    - (x) Layout components: Stack, Grid, Card, Sidebar
+    - (x) Storybook documentation for all components
+
+*** (x) 42.8.3. Common Utilities {* 42.8.3}
+    Shared TypeScript utilities consumed by Frontend and Mobile.
+    - (x) Date formatting and timezone helpers
+    - (x) Input validation (email, phone, password strength)
+    - (x) Error types and API error parsing
+    - (x) Feature flag evaluation client
+
+*** (x) 42.8.4. Migration System {* 42.8.4}
+    Database schema migration tool and version tracking. Features depend
+    on this being ready before their Stage 2+ work can proceed (Stage 1
+    may use hardcoded/mocked data).
+    - (x) Migration runner with up/down support
+    - (x) Version tracking table and lock mechanism
+    - (x) CI integration: migrations run before test suite
+    - (x) Seed data system for dev/staging environments
+
+*** (?) 42.8.5. Event Bus {* 42.8.5}
+    /Needs decision: should cross-feature events (e.g. "note shared",
+    "user joined group") use the existing message queue or a dedicated
+    in-process event bus? Spike needed to evaluate trade-offs./
+
+
+** (-) 42.9. Dependency Maintenance {* 42.9}
+
+   Ongoing obligation. Contract tests validate behavioural compatibility
+   on every dependency update.
+
+   Stage 1:
+   - Backend and frontend dependency baseline established
+   - Dependabot configured for automated PR creation
+
+   Stage 2:
+   - Security patches for web framework and auth library vulnerabilities
+   - React Native upgrade (new architecture migration)
+   - Contract tests added for upgraded dependencies
+
+
+** 42.10. Architecture Notes {* 42.10}
+
+   - /API-first design/ — OpenAPI spec drives backend routes, client SDK,
+     and API documentation simultaneously
+   - /WebSocket for real-time/ — chat messages and presence via persistent
+     connections; REST for everything else
+   - /Offline-first mobile/ — local SQLite + sync queue; conflict resolution
+     on reconnect
+   - /Queue-based fan-out/ — notifications and chat delivery decoupled from
+     request path via message queue
+   - /CDN for static assets/ — user uploads served through CloudFront;
+     signed URLs for private content
+   - /Tag-based promotion/ — `main` → dev, RC tag → staging, release tag → prod
+
+
+** (-) 42.11. [ext] External Dependencies {* 42.11}
+
+   External blockers and handoffs from other teams, vendors, or processes.
+   Features reference these as pre-requisites — when an external dependency
+   is `(x)` complete, dependent features can proceed.
+
+*** (x) 42.11.1. Design Handoff — Authentication {* 42.11.1}
+    High-fidelity mockups for all auth screens (login, register, OAuth,
+    2FA setup, recovery codes, security settings).
+    - (x) Figma designs delivered and reviewed
+    - (x) Design tokens exported to {* 42.8.2} UI Component Library
+
+*** (x) 42.11.2. Design Handoff — Chat {* 42.11.2}
+    Conversation list, thread view, group creation, attachment viewer.
+    - (x) Figma designs for Stage 1 (direct messaging)
+    - (-) Figma designs for Stage 2 (group chat, attachment viewer)
+
+*** (-) 42.11.3. Design Handoff — Notes {* 42.11.3}
+    Note editor, list view, share dialog, responsive layouts.
+    - (x) Wireframe mockups (Stage 1)
+    - (x) Functional mockups (Stage 2)
+    - (-) Pixel-perfect specs with redlines (Stage 3)
+    - ( ) Collaborative editing UI patterns (Stage 4)
+
+*** (x) 42.11.4. Third-party — Push Providers {* 42.11.4}
+    APNs (Apple) and FCM (Google) credentials and configuration.
+    - (x) Apple Developer account: APNs key generated and uploaded
+    - (x) Firebase project: FCM server key provisioned
+    - (x) Credentials stored in {* 42.6.7} Secrets Manager
+
+*** (=) 42.11.5. Legal — Privacy Policy Review {* 42.11.5}
+    /On hold — legal team reviewing data handling for push notification
+    tokens and chat message retention policy. Blocks Notifications Stage 1
+    Validation sign-off./
+    - (x) Data processing inventory submitted to legal
+    - (=) Legal review in progress (ETA unknown)
+    - ( ) Updated privacy policy published
+
+*** ( ) 42.11.6. Third-party — OAuth Provider Approval {* 42.11.6}
+    App review for Google and Apple OAuth consent screens.
+    - (x) Google OAuth consent screen submitted
+    - (x) Apple Sign-In capability registered
+    - ( ) Google review approved (typically 2-4 weeks)
+    - ( ) Apple review approved

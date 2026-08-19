@@ -135,8 +135,8 @@ local function collect_file_context(buf, include_project_path)
 
     local filename = vim.fn.fnamemodify(filepath, ":t")
 
-    -- Skip status files (project.norg / index.norg) — they don't have a meaningful title
-    if filename == "project.norg" or filename == "index.norg" then
+    -- Skip status files — show project path only
+    if project.is_status_file(filepath) then
         if include_project_path then
             local root = project.find_root(filepath)
             if root then

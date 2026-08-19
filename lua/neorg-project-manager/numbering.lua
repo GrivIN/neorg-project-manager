@@ -284,9 +284,6 @@ function M.get_file_prefix(buf)
     end
 
     local filename = vim.fn.fnamemodify(filepath, ":t")
-    if filename == "index.norg" or filename == "project.norg" then
-        return nil
-    end
 
     local project = require("neorg-project-manager.project")
     local prefix, _ = project.extract_prefix(filename)

@@ -51,7 +51,7 @@ local function compute_dir_renames(dir_path)
     while true do
         local name, entry_type = vim.uv.fs_scandir_next(handle)
         if not name then break end
-        if name:sub(1, 1) == "." or name == "index.norg" or name == "project.norg" then
+        if name:sub(1, 1) == "." then
             goto continue
         end
 
@@ -319,7 +319,7 @@ function M.renumber_project(buf)
     local filepath = vim.api.nvim_buf_get_name(buf)
     local root = project.find_root(filepath)
     if not root then
-        vim.notify("No project root found (no project.norg in ancestor directories)", vim.log.levels.ERROR)
+        vim.notify("No project root found (no root-level numbered file in ancestor directories)", vim.log.levels.ERROR)
         return
     end
 
@@ -349,7 +349,7 @@ function M.renumber_project(buf)
         -- 3. Rebuild project index cache
         idx.rebuild()
 
-        -- 4. Regenerate all status files (index.norg + project.norg)
+        -- 4. Regenerate all status files
         status.regenerate_all(root)
 
         vim.notify(

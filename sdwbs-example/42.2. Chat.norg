@@ -1,0 +1,176 @@
+* (-) 42.2. [feature] Chat {* 42.2}
+
+  Real-time messaging — direct and group — with media attachments.
+  WebSocket-based delivery with REST fallback for message history.
+
+  Pre-requisites:
+  - (x) {* 42.1} Authentication — session identity
+  - (x) {* 42.6.4} Cache — presence tracking (online/offline/typing)
+  - (x) {* 42.6.5} Object Storage — attachment uploads
+  - (x) {* 42.6.6} Message Queue — async delivery and fan-out
+
+
+** (x) 42.2.1. Stage 1 — Direct Messaging {* 42.2.1}
+
+*** (x) 42.2.1.1. Design {* 42.2.1.1}
+    User stories:
+    - /As a user, I want to send and receive messages in real time with
+      another user, so that we can communicate without leaving the app./
+    - /As a user, I want to see when the other person is online or typing,
+      so that conversations feel natural and responsive./
+
+    Artifacts:
+    - WebSocket message protocol spec (connect, send, receive, ack)
+    - Database schema: `conversations`, `messages`, `participants` tables
+    - Sequence diagram: message send → queue → fan-out → WebSocket push
+
+*** (x) 42.2.1.2. Implementation {* 42.2.1.2}
+
+**** (x) 42.2.1.2.1. Backend {* 42.2.1.2.1}
+     - (x) Conversation creation endpoint (1-on-1)
+       - AC: returns existing conversation if pair already exists
+       - AC: both participants auto-joined; 403 if target user not found
+     - (x) Message send endpoint with WebSocket broadcast
+       - AC: message persisted to DB, then broadcast via WebSocket
+       - AC: delivery receipt sent to sender on recipient connection
+     - (x) Message history endpoint with cursor pagination
+       - AC: 50 messages per page; cursor-based (no offset drift)
+       - AC: returns messages newest-first; includes sender profile
+     - (x) WebSocket connection manager
+       - AC: authenticates via token on connect; heartbeat every 30s
+       - AC: auto-reconnect hint on server-initiated disconnect
+     - (x) Presence service (online/offline/typing indicators)
+       - AC: status updated in Redis with 60s TTL; typing expires in 5s
+       - AC: presence changes broadcast to conversation participants
+     - (x) Read receipt tracking
+       - AC: tracks last-read message ID per participant per conversation
+       - AC: unread count derivable from last-read vs latest message
+
+**** (x) 42.2.1.2.2. Frontend {* 42.2.1.2.2}
+     - (x) Conversation list with unread badges
+       - AC: sorted by last message time; badge shows unread count
+       - AC: last message preview (truncated to 80 chars)
+     - (x) Message thread view with infinite scroll
+       - AC: loads 50 messages; scroll-up triggers older page fetch
+       - AC: auto-scrolls to bottom on new message (if already at bottom)
+     - (x) Message input with typing indicator broadcast
+       - AC: sends typing event on keystroke; debounced to 1 event/3s
+       - AC: "User is typing..." shown to other participant
+     - (x) Online presence indicator (green dot / grey dot)
+       - AC: green = online (seen in last 60s); grey = offline
+     - (x) Message timestamps with relative formatting
+       - AC: "just now", "5m ago", "2h ago", then absolute date
+
+**** (x) 42.2.1.2.3. Mobile {* 42.2.1.2.3}
+     - (x) Conversation list with swipe actions
+       - AC: swipe to mute/unmute or archive; matches {* 42.8.2} patterns
+     - (x) Message thread with keyboard avoidance
+       - AC: input bar stays above keyboard; scroll adjusts to keep
+             context visible
+     - (x) Push notification on new message (when app backgrounded)
+       - AC: notification shows sender name + message preview
+       - AC: tap opens conversation; notification cleared on read
+     - (x) Background WebSocket with reconnection
+       - AC: maintains connection while app is foregrounded
+       - AC: reconnects with exponential backoff (1s, 2s, 4s, max 30s)
+     - (x) Haptic feedback on message send/receive
+       - AC: light tap on send; subtle pulse on incoming message
+
+*** (x) 42.2.1.3. Verification {* 42.2.1.3}
+    - Backend: 7 test suites (conversation CRUD, messaging, WebSocket,
+      presence, read receipts, pagination, delivery)
+    - Frontend: 5 test suites (conversation list, thread view, typing
+      indicator, presence, timestamps)
+    - Mobile: 5 test suites (swipe actions, keyboard, push notifications,
+      reconnection, haptics)
+    - Integration: E2E direct message flow — send on web, receive on
+      mobile, verify read receipt sync
+
+*** (x) 42.2.1.4. Validation {* 42.2.1.4}
+    Outcome: message delivery latency <200ms P95; daily active chat users >40% of total
+    - (x) 6 QA test scenarios (send/receive, presence, typing, read
+          receipts, push notification, offline reconnect)
+    - (x) Performance: message delivery latency <200ms (same region)
+    - (x) Cross-platform sync: message state consistent across web/mobile
+
+
+** (-) 42.2.2. Stage 2 — Group Chat & Attachments {* 42.2.2}
+
+*** (x) 42.2.2.1. Design {* 42.2.2.1}
+    User stories:
+    - /As a user, I want to create group conversations and invite
+      members, so that teams can communicate in shared channels./
+    - /As a user, I want to share images and files in conversations,
+      so that I can collaborate without switching to another tool./
+
+    Pre-requisites:
+    - (x) {* 42.2.1} Stage 1 — Direct Messaging
+    - (x) {* 42.6.5} Object Storage — attachment bucket
+    - (-) {* 42.6.8} CDN — media delivery
+
+*** (-) 42.2.2.2. Implementation {* 42.2.2.2}
+
+**** (x) 42.2.2.2.1. Backend {* 42.2.2.2.1}
+     - (x) Group conversation CRUD (create, rename, add/remove members)
+       - AC: creator is admin; max 100 members per group
+       - AC: member removal notifies removed user; admin transfer supported
+     - (x) Message fan-out for group delivery
+       - AC: message queued to SQS; fan-out delivers to all online members
+       - AC: offline members receive on reconnect via history endpoint
+     - (x) Attachment upload with pre-signed URLs
+       - AC: client requests upload URL; uploads directly to S3
+       - AC: max file size 25MB; allowed types: images, PDF, documents
+       - AC: virus scan on upload before marking available
+     - (x) Attachment metadata and thumbnail generation
+       - AC: thumbnails generated async (Lambda); stored alongside original
+       - AC: metadata includes size, type, dimensions (for images)
+     - (x) Group admin permissions (mute member, pin message, delete message)
+       - AC: admins can delete any message; members can only delete own
+       - AC: muted members can read but not send for configurable duration
+
+**** (-) 42.2.2.2.2. Frontend {* 42.2.2.2.2}
+     - (x) Group creation dialog with member search
+       - AC: user search with autocomplete; shows avatar + name
+       - AC: selected members shown as chips; removable before creation
+     - (x) Group info sidebar (members list, shared media, settings)
+       - AC: shows member roles (admin/member); admin actions visible
+             only to admins
+     - (-) Attachment upload with drag-and-drop and progress bar
+       - AC: drag-and-drop zone in message input area
+       - AC: progress bar per file; cancel button during upload
+       - AC: preview thumbnail shown in message after upload completes
+     - ( ) Image viewer with zoom and gallery navigation
+       - AC: click image opens lightbox; arrow keys navigate gallery
+       - AC: download button; share button
+     - ( ) File preview for PDFs and documents
+       - AC: inline PDF viewer; download fallback for unsupported types
+
+**** ( ) 42.2.2.2.3. Mobile {* 42.2.2.2.3}
+     - ( ) Group creation screen with contact picker
+       - AC: search by name; multi-select with checkmarks
+       - AC: group name and optional avatar on creation screen
+     - ( ) Attachment picker (camera, gallery, files)
+       - AC: bottom sheet with camera/gallery/files options
+       - AC: multi-select in gallery (up to 10 images)
+       - AC: compression for images >2MB before upload
+     - ( ) Image viewer with pinch-to-zoom and save-to-gallery
+       - AC: swipe to navigate between images in conversation
+       - AC: long-press shows save/share/forward options
+     - ( ) Group notification settings (mute, custom tone)
+       - AC: mute options: 1h, 8h, 24h, until I turn on
+       - AC: per-group setting; overrides default notification preference
+
+*** (-) 42.2.2.3. Verification {* 42.2.2.3}
+    - (x) Backend: 6 test suites (group CRUD, fan-out, attachments,
+          thumbnails, permissions, virus scan)
+    - (-) Frontend: 2 of 4 suites completed (group creation, info sidebar;
+          pending: attachment upload, image/file viewers)
+    - ( ) Mobile: 0 of 4 suites (group creation, attachment picker,
+          image viewer, notification settings)
+    - ( ) Integration: E2E group chat with attachments (pending)
+
+*** ( ) 42.2.2.4. Validation {* 42.2.2.4}
+    - ( ) QA scenarios: group lifecycle, attachment upload/download,
+          admin actions, notification muting
+    - ( ) Performance: fan-out latency for 100-member group <500ms
+    - ( ) Cross-platform: attachment uploaded on mobile viewable on web

@@ -9,6 +9,7 @@
 
 local M = {}
 
+local config = require("neorg-project-manager.config")
 local helpers = require("neorg-project-manager.helpers")
 
 --- Check if any child of a heading has started (has any non-undone state).
@@ -270,7 +271,7 @@ end
 --- @param cfg table           Plugin config
 --- @param number_index table  Local number index
 --- @param root TSNode|nil     Pre-parsed root node (skips re-parsing if provided)
-function M.refresh(buf, ns, cfg, number_index, root)
+function M.refresh(buf, ns, number_index, root)
     root = root or helpers.get_norg_root(buf)
     if not root then
         return
@@ -281,7 +282,8 @@ function M.refresh(buf, ns, cfg, number_index, root)
         if level then
             local state = helpers.get_todo_state(node)
             if state then
-                local prereq_links = find_prereq_links(node, buf, cfg.prereq_pattern)
+                local prereq_pattern = config.get("prereq_pattern", "Pre%-requisites:")
+                local prereq_links = find_prereq_links(node, buf, prereq_pattern)
 
                 -- Cross-file fallback: if no local prereqs, check linked file
                 if #prereq_links == 0 then
@@ -299,7 +301,7 @@ function M.refresh(buf, ns, cfg, number_index, root)
                                 for _, entry in ipairs(entries) do
                                     if not entry.is_dir and entry.prefix == link_num then
                                         prereq_links = scan_file_for_prereqs(
-                                            entry.filepath, cfg.prereq_pattern
+                                            entry.filepath, prereq_pattern
                                         )
                                         break
                                     end
@@ -323,8 +325,9 @@ function M.refresh(buf, ns, cfg, number_index, root)
                     local row = node:start()
 
                     if done < total then
+                        local blocked_format = config.get("blocked_format")
                         vim.api.nvim_buf_set_extmark(buf, ns, row, 0, {
-                            virt_text = { { " " .. cfg.blocked_format(done, total), cfg.blocked_highlight } },
+                            virt_text = { { " " .. blocked_format(done, total), config.get("blocked_highlight") } },
                             virt_text_pos = "eol",
                             hl_mode = "combine",
                         })
@@ -332,7 +335,7 @@ function M.refresh(buf, ns, cfg, number_index, root)
                         local started = has_started_children(node, level)
                         if not started and state == "undone" then
                             vim.api.nvim_buf_set_extmark(buf, ns, row, 0, {
-                                virt_text = { { " " .. cfg.ready_text, cfg.ready_highlight } },
+                                virt_text = { { " " .. config.get("ready_text"), config.get("ready_highlight") } },
                                 virt_text_pos = "eol",
                                 hl_mode = "combine",
                             })

@@ -40,7 +40,6 @@ function M.foldexpr(lnum, buf)
     -- Non-heading lines: find the nearest heading above to determine body fold level.
     -- Body content gets level = parent_heading_level + 1, which creates an independent
     -- fold region between the heading and its first child heading.
-    local total_lines = vim.api.nvim_buf_line_count(buf)
     for i = lnum - 1, math.max(1, lnum - 50), -1 do
         local prev = vim.api.nvim_buf_get_lines(buf, i - 1, i, false)[1]
         if prev then
@@ -294,27 +293,18 @@ end
 --- LEGACY ALIAS
 ---------------------------------------------------------------------------
 
---- Legacy toggle function — now delegates to toggle_body for backward compatibility.
---- @param buf number|nil
-function M.toggle(buf)
-    M.toggle_body(buf)
-end
-
 ---------------------------------------------------------------------------
 --- DETECT STATUS FILE
 ---------------------------------------------------------------------------
 
---- Check if a buffer is a status file (project.norg or index.norg).
+--- Check if a buffer is a status file (root-level or directory-matching numbered file).
 ---
 --- @param buf number  Buffer handle
 --- @return boolean    True if the buffer is a status file
 function M.is_status_file(buf)
     local filepath = vim.api.nvim_buf_get_name(buf)
-    if filepath == "" then
-        return false
-    end
-    local filename = vim.fn.fnamemodify(filepath, ":t")
-    return filename == "project.norg" or filename == "index.norg"
+    local project_mod = require("neorg-project-manager.project")
+    return project_mod.is_status_file(filepath)
 end
 
 return M

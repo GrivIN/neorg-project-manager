@@ -74,13 +74,17 @@ function M.resolve_target_number(buf)
 
     local root = project.find_root(filepath)
     if not root then
-        return nil, nil, "No project root found (no project.norg in ancestor directories)"
+        return nil, nil, "No project root found (no root-level numbered file in ancestor directories)"
     end
 
     local filename = vim.fn.fnamemodify(filepath, ":t")
+    local dir_path = vim.fn.fnamemodify(filepath, ":p:h")
 
     -- From a status file: read the link on the cursor line
-    if filename == "project.norg" or filename == "index.norg" then
+    local status_file = project.find_status_file(dir_path)
+    local is_status = status_file and vim.fn.fnamemodify(status_file, ":t") == filename
+
+    if is_status then
         local cursor_line = vim.api.nvim_win_get_cursor(0)[1]
         local line = vim.api.nvim_buf_get_lines(buf, cursor_line - 1, cursor_line, false)[1]
         if not line then
@@ -107,11 +111,6 @@ function M.resolve_target_number(buf)
     end
 
     -- From a content file: use the file's own prefix
-    -- (Defensive: index.norg is handled above as a status file, but guard anyway)
-    if filename == "index.norg" then
-        return nil, nil, "Cannot extract from index.norg"
-    end
-
     local prefix, _ = project.extract_prefix(filename)
     if not prefix then
         return nil, nil, "File has no number prefix in its name"
@@ -278,17 +277,20 @@ function M.locate_entry(number, root)
         end
     end
 
-    -- Case 3: number is a heading inside a status file (project.norg / index.norg)
+    -- Case 3: number is a heading inside a status file
     local status_files = {}
-    local project_file = root .. "/project.norg"
-    if vim.fn.filereadable(project_file) == 1 then
-        table.insert(status_files, project_file)
+    local root_status = project.find_status_file(root)
+    if root_status and vim.fn.filereadable(root_status) == 1 then
+        table.insert(status_files, root_status)
     end
 
-    local function find_index_files(dir)
-        local idx_file = dir .. "/index.norg"
-        if vim.fn.filereadable(idx_file) == 1 then
-            table.insert(status_files, idx_file)
+    local function find_status_files(dir)
+        local dir_status = project.find_status_file(dir)
+        if dir_status and vim.fn.filereadable(dir_status) == 1 then
+            -- Avoid duplicating the root status file
+            if dir_status ~= root_status then
+                table.insert(status_files, dir_status)
+            end
         end
         local handle = vim.uv.fs_scandir(dir)
         if not handle then return end
@@ -296,11 +298,11 @@ function M.locate_entry(number, root)
             local name, entry_type = vim.uv.fs_scandir_next(handle)
             if not name then break end
             if entry_type == "directory" and name:sub(1, 1) ~= "." then
-                find_index_files(dir .. "/" .. name)
+                find_status_files(dir .. "/" .. name)
             end
         end
     end
-    find_index_files(root)
+    find_status_files(root)
 
     for _, status_filepath in ipairs(status_files) do
         local found, _ = M._find_heading_in_file(status_filepath, nil, number)
@@ -397,9 +399,9 @@ local function execute_extraction(location)
     -- Update status files if applicable
     local root = project.find_root(file_path)
     if root then
-        local project_path = root .. "/project.norg"
-        if vim.fn.filereadable(project_path) == 1 and location.filepath ~= project_path then
-            status.update_file(project_path, root, "project")
+        local root_status = project.find_status_file(root)
+        if root_status and vim.fn.filereadable(root_status) == 1 and location.filepath ~= root_status then
+            status.update_file(root_status, root, "project")
         end
     end
 

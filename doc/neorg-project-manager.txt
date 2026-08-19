@@ -103,10 +103,11 @@ Call setup explicitly if not using lazy.nvim's `opts`: >lua
                                         *:NeorgPMExtract*
 :NeorgPMExtract
     Extract a heading's content into its own .norg file. Place cursor on
-    a heading with a `{* number}` link in `project.norg` or `index.norg`.
-    The content below the heading moves to a new file (with heading levels
-    shifted to start at `*`). The heading line stays in place as a
-    navigation link. Numbering is preserved. Shows a confirmation prompt.
+    a heading with a `{* number}` link in a status file (root-level or
+    directory-matching numbered file). The content below the heading moves
+    to a new file (with heading levels shifted to start at `*`). The
+    heading line stays in place as a navigation link. Numbering is
+    preserved. Shows a confirmation prompt.
 
     Aborts if the entry is already a standalone file or if the target
     file already exists on disk.
@@ -274,16 +275,18 @@ Example: >lua
 ==============================================================================
 9. PROJECT STRUCTURE                    *neorg-project-manager-structure*
 
-A project is identified by a `project.norg` file in the root directory.
+A project is identified by a root-level numbered file — a `.norg` file
+whose prefix has no separator (depth 1), e.g., `42. ACME App.norg`.
 
-    project.norg             Root marker + full status overview
-    index.norg               Per-directory status (direct children)
-    <number>. <title>.norg   Content file (prefix-aware numbering)
-    <number>. <title>/       Numbered directory
+    <N>. <title>.norg            Root status file (depth-1 prefix = root marker)
+    <N.M>. <title>.norg          Content/companion file
+    <N.M>. <title>/              Numbered directory
+    <N.M>. <title>/<N.M>. *.norg Directory status file (prefix matches dir)
 
 File prefixes:
-    "1.1.3.1. Stage 1.norg"  → prefix = "1.1.3.1"
-    "index.norg"             → prefix = nil (special file)
+    "42. ACME App.norg"      → prefix = "42" (depth 1 = root marker)
+    "42.1. Auth.norg"        → prefix = "42.1"
+    "notes.norg"             → prefix = nil (no number)
 
 Headings inside a file are numbered from the prefix:
     File "1.1.3.1. Stage 1.norg":
