@@ -427,12 +427,20 @@ compare:
   or `[READY_FOR_IMPLEMENTATION]`
 - **Progress indicators** — virtual text shows `[3/5]` combining child headings
   and list item completion
-- **Project status tree** — `project.norg` auto-updates with a navigable
+- **Computed status** — parent state is always derived from children, never
+  set manually. Cancelled items excluded, ambiguous propagates upward.
+- **Compound status markers** — combine primary state with qualifiers using
+  norg pipe syntax: `(?|-)` = in progress + uncertain, `(=|?)` = on hold + uncertain
+- **Project status tree** — status files auto-update with a navigable
   overview of your entire project's state
-- **File renaming** — `:NeorgPMRenumberProject` (`<LocalLeader>pR`) renumbers files, directories,
+- **Bidirectional propagation** — manually change a state in a status file
+  and it propagates back to the source file
+- **Item picker** — `:NeorgPMPick` to browse/filter all project items by status
+- **Project init** — `:NeorgPMInit` scaffolds a new project with a numbered root status file
+- **File renaming** — `:NeorgPMRenumberProject` renumbers files, directories,
   and all links when you restructure
 - **Tree fold/toggle** — collapse or expand a tree element and all its children
-  in `project.norg` / `index.norg` with a single keystroke
+  in status files with a single keystroke
 - **Extract to file** — move a heading's content into its own `.norg` file,
   keeping the heading as a navigation link
 - **Heading breadcrumb** — shows your current position in the project hierarchy
@@ -657,13 +665,56 @@ if installed.
 | [Architecture](docs/architecture.md) | Internals, state aggregation, compound markers, project structure |
 | `:help neorg-project-manager` | Vim help (commands + keybinds quick reference) |
 
+## Status Model
+
+Status is **computed**, never self-reported. A parent's state is always
+derived from its children:
+
+```
+3 children: (x) done, (-) in progress, ( ) undone
+→ parent becomes (-) [1/3]
+```
+
+### Aggregation rules
+
+| Children | Parent |
+|----------|--------|
+| All done | `(x)` |
+| Some done or pending | `(-)` |
+| None started | `( )` |
+| All on-hold | `(=)` |
+| All cancelled | `(_)` |
+| All ambiguous | `(?)` |
+
+**Cancelled `(_)` items are excluded** from the active pool. Progress
+counts reflect only active items: 2 done + 1 cancelled → `(x) [2/2]`.
+
+**Ambiguous `(?)` propagates upward** as a qualifier. If any child is
+uncertain, the parent shows it: `(?|-)` = pending with ambiguity.
+
+**Important `(!)` is local-only** — marks priority but doesn't propagate.
+
+### Compound markers
+
+Combine a primary state with a qualifier using norg's `|` pipe syntax:
+
+| Marker | Meaning |
+|--------|---------|
+| `(?|-)` | In progress + uncertain |
+| `(=|?)` | On hold + uncertain |
+| `(=|-)` | On hold + partially in progress |
+
+The plugin determines primary vs qualifier by semantic role (not position).
+`(?|-)` and `(-|?)` are equivalent — though only `(?|-)` parses correctly
+due to norg scanner constraints. The plugin handles ordering automatically.
+
+See [Architecture docs](docs/architecture.md) for full details.
+
 ## Health Check
 
 Run `:checkhealth neorg-project-manager` to verify setup.
 
 ## Roadmap
-
-These items are planned but not yet implemented:
 
 - [ ] Demo GIF / screenshot in README
 - [ ] Statusline component — show current heading number / project state
@@ -672,18 +723,6 @@ These items are planned but not yet implemented:
 - [ ] Windows compatibility testing and CI
 - [ ] Semantic version tags / release workflow
 - [ ] LuaLS type annotations (`.luarc.json` + `@class` annotations on config)
-
-Recently completed:
-
-- [x] Compound status markers — pipe-delimited norg extensions (`(?|-)`) for
-      combining primary state with qualifiers. Ambiguous propagates upward,
-      cancelled items excluded from aggregation, all-cancelled → cancelled.
-- [x] `:NeorgPMInit` command — scaffold a project structure with a numbered
-      root status file interactively
-- [x] `:NeorgPMPick` / `:NeorgPMPickByState` — browse all project items with
-      status filtering via `vim.ui.select` (works with telescope via dressing.nvim)
-- [x] Bidirectional propagation — toggling a todo in a status file propagates
-      the change back to the source file's heading
 
 Contributions welcome — see [CONTRIBUTING.md](CONTRIBUTING.md).
 
