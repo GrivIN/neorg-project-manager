@@ -177,6 +177,7 @@ Browse project items with status filtering:
 - `:NeorgPMPick` (`<LocalLeader>pp`) — browse all items
 - `:NeorgPMPick pending` — browse only in-progress items
 - `:NeorgPMPickByState` (`<LocalLeader>pP`) — choose a state to filter by, then browse
+- `:NeorgPMPickByOwner` (`<LocalLeader>po`) — choose an owner to filter by, then browse
 
 Uses `vim.ui.select` — automatically works with telescope (via dressing.nvim),
 fzf-lua, or any other UI override.
@@ -188,6 +189,52 @@ directory. Prompts for project name and starting WBS number, then creates a
 numbered root status file (e.g., `1. My Project.norg`).
 
 If a project already exists in the directory, opens its status file instead.
+
+## Outcome tracking
+
+The plugin detects `Outcome:` or `Outcomes:` sections under headings and
+tracks deliverable completion:
+
+```norg
+*** (x) 42.1.1.4. Validation {* 42.1.1.4}
+    Outcomes:
+    - (x) API contract document published
+    - (x) Load test report (>1000 req/s sustained)
+    - ( ) Security audit sign-off
+```
+
+Virtual text shows: `[2/3 outcomes]`
+
+If the heading is marked `(x)` done but some outcomes are not complete,
+a warning appears: `[OUTCOMES INCOMPLETE]`
+
+Configure via:
+```lua
+opts = {
+    outcome_tracking = true,              -- enable/disable
+    outcome_pattern = "Outcomes?:",       -- matches both singular and plural
+    outcome_incomplete_warning = true,    -- warn on done heading + incomplete outcomes
+}
+```
+
+## Metadata fields (Owner, Effort)
+
+The plugin extracts `Owner:` and `Effort:` fields from heading descriptions.
+These are available for filtering in the picker:
+
+```norg
+** (-) 42.2. [feature] Chat {* 42.2}
+   Owner: @backend-team, @frontend-team
+   Effort: XL (6-8 sprints across 2 stages)
+```
+
+- `:NeorgPMPickByOwner` (`<LocalLeader>po`) — filter items by owner
+- Effort sizes (XS, S, M, L, XL, XXL) are parsed for aggregation
+
+Optionally show field badges as virtual text:
+```lua
+opts = { field_display = "virtual" }  -- "none" (default) or "virtual"
+```
 
 ## Commands
 
@@ -202,6 +249,7 @@ If a project already exists in the directory, opens its status file instead.
 | `:NeorgPMExtract` | `<LocalLeader>pe` | Extract heading content into its own file |
 | `:NeorgPMPick` | `<LocalLeader>pp` | Browse project items (optional state filter argument) |
 | `:NeorgPMPickByState` | `<LocalLeader>pP` | Browse items filtered by a chosen status |
+| `:NeorgPMPickByOwner` | `<LocalLeader>po` | Browse items filtered by owner |
 | `:NeorgPMInit` | `<LocalLeader>pi` | Initialize a new project with a numbered root status file |
 | (automatic) | `<CR>` | Follow `{* number}` link (cross-file), falls back to Neorg hop |
 

@@ -31,6 +31,8 @@ local breadcrumb = require("neorg-project-manager.breadcrumb")
 local picker = require("neorg-project-manager.picker")
 local bidir = require("neorg-project-manager.bidir")
 local scaffold = require("neorg-project-manager.scaffold")
+local outcomes = require("neorg-project-manager.outcomes")
+local fields = require("neorg-project-manager.fields")
 
 --- Default configuration for the plugin.
 --- Users can override any of these in their lazy.nvim `opts` table.
@@ -198,6 +200,48 @@ M.defaults = {
     breadcrumb_format = nil,
 
     ---------------------------------------------------------------------------
+    --- OUTCOME TRACKING
+    ---------------------------------------------------------------------------
+
+    --- Enable outcome/deliverable tracking virtual text.
+    outcome_tracking = true,
+
+    --- Lua pattern to detect outcome sections in heading content.
+    outcome_pattern = "Outcomes?:",
+
+    --- Highlight group for outcome progress count.
+    outcome_highlight = "DiagnosticInfo",
+
+    --- Format function for outcome progress.
+    outcome_format = function(done, total)
+        return string.format("[%d/%d outcomes]", done, total)
+    end,
+
+    --- Warn when a heading is (x) done but outcomes are not all complete.
+    outcome_incomplete_warning = true,
+    outcome_warning_highlight = "DiagnosticWarn",
+    outcome_warning_text = "[OUTCOMES INCOMPLETE]",
+
+    ---------------------------------------------------------------------------
+    --- METADATA FIELD TRACKING (Owner, Effort)
+    ---------------------------------------------------------------------------
+
+    --- Enable metadata field extraction for picker display and filtering.
+    field_tracking = true,
+
+    --- Lua patterns for field detection.
+    owner_pattern = "Owner:",
+    effort_pattern = "Effort:",
+
+    --- Display mode for field badges.
+    ---   "none"    — no virtual text (fields still available in picker)
+    ---   "virtual" — show compact badges at end of heading lines
+    field_display = "none",
+
+    --- Highlight group for field badges (when field_display = "virtual").
+    field_highlight = "Comment",
+
+    ---------------------------------------------------------------------------
     --- KEYBINDINGS
     ---------------------------------------------------------------------------
 
@@ -218,6 +262,8 @@ M.ns = {
     prereqs = vim.api.nvim_create_namespace("neorg-pm/prereqs"),
     mixed = vim.api.nvim_create_namespace("neorg-pm/mixed"),
     breadcrumb = vim.api.nvim_create_namespace("neorg-pm/breadcrumb"),
+    outcomes = vim.api.nvim_create_namespace("neorg-pm/outcomes"),
+    fields = vim.api.nvim_create_namespace("neorg-pm/fields"),
 }
 
 --- Per-buffer state tracking.
@@ -373,6 +419,11 @@ function M.setup(opts)
         picker.pick_by_state()
     end, { desc = "Browse project items filtered by status" })
 
+    --- Browse project items filtered by owner.
+    vim.api.nvim_create_user_command("NeorgPMPickByOwner", function()
+        picker.pick_by_owner()
+    end, { desc = "Browse project items filtered by owner" })
+
     --- Initialize a new project in the current directory.
     vim.api.nvim_create_user_command("NeorgPMInit", function()
         scaffold.init()
@@ -433,6 +484,8 @@ function M.attach(buf)
             { buffer = buf, desc = "Browse project items" })
         vim.keymap.set("n", prefix .. "P", "<cmd>NeorgPMPickByState<CR>",
             { buffer = buf, desc = "Browse items by status" })
+        vim.keymap.set("n", prefix .. "o", "<cmd>NeorgPMPickByOwner<CR>",
+            { buffer = buf, desc = "Browse items by owner" })
         vim.keymap.set("n", prefix .. "i", "<cmd>NeorgPMInit<CR>",
             { buffer = buf, desc = "Initialize project" })
     end
@@ -604,8 +657,8 @@ function M.schedule_refresh(buf)
     end))
 end
 
---- Refresh all virtual text indicators (mixed progress + prereqs).
---- Parses the buffer once and passes the root to both modules.
+--- Refresh all virtual text indicators (mixed progress + prereqs + outcomes + fields).
+--- Parses the buffer once and passes the root to all modules.
 ---
 --- @param buf number  Buffer handle
 function M.refresh_virtual_text(buf)
@@ -616,8 +669,10 @@ function M.refresh_virtual_text(buf)
     -- Clear existing virtual text
     vim.api.nvim_buf_clear_namespace(buf, M.ns.mixed, 0, -1)
     vim.api.nvim_buf_clear_namespace(buf, M.ns.prereqs, 0, -1)
+    vim.api.nvim_buf_clear_namespace(buf, M.ns.outcomes, 0, -1)
+    vim.api.nvim_buf_clear_namespace(buf, M.ns.fields, 0, -1)
 
-    -- Parse once (shared by both modules)
+    -- Parse once (shared by all modules)
     local helpers = require("neorg-project-manager.helpers")
     local root = helpers.get_norg_root(buf)
     if not root then
@@ -635,6 +690,16 @@ function M.refresh_virtual_text(buf)
     -- Display prerequisite tracking indicators
     if M.config.prerequisite_tracking then
         prereqs.refresh(buf, M.ns.prereqs, number_index, root)
+    end
+
+    -- Display outcome tracking indicators
+    if M.config.outcome_tracking then
+        outcomes.refresh(buf, M.ns.outcomes, root)
+    end
+
+    -- Display field badges (if configured)
+    if M.config.field_tracking and M.config.field_display == "virtual" then
+        fields.refresh(buf, M.ns.fields, root)
     end
 end
 

@@ -127,6 +127,11 @@ Call setup explicitly if not using lazy.nvim's `opts`: >lua
     Two-step picker: first choose a status to filter by, then browse
     the matching items.
 
+                                        *:NeorgPMPickByOwner*
+:NeorgPMPickByOwner
+    Two-step picker: first choose an owner from those found in the
+    project's Owner: fields, then browse items owned by them.
+
                                         *:NeorgPMInit*
 :NeorgPMInit
     Initialize a new project in the current directory. Prompts for
@@ -149,6 +154,7 @@ All keybinds are buffer-local to norg files.
     <LocalLeader>pe     |:NeorgPMExtract|
     <LocalLeader>pp     |:NeorgPMPick| (browse project items)
     <LocalLeader>pP     |:NeorgPMPickByState| (browse by status filter)
+    <LocalLeader>po     |:NeorgPMPickByOwner| (browse by owner filter)
     <LocalLeader>pi     |:NeorgPMInit| (initialize project)
     <CR>                Number-aware link hop (falls back to Neorg native hop)
 

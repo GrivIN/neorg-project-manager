@@ -149,52 +149,6 @@ local function jump_to_item(item, root)
     vim.notify("Could not find " .. item.prefix, vim.log.levels.WARN)
 end
 
---- Open the project item picker.
---- @param opts table|nil  {filter = string|string[]|nil}
-function M.pick(opts)
-    opts = opts or {}
-    local buf = vim.api.nvim_get_current_buf()
-    local filepath = vim.api.nvim_buf_get_name(buf)
-    local root = project.find_root(filepath)
-
-    if not root then
-        vim.notify("No project root found.", vim.log.levels.ERROR)
-        return
-    end
-
-    index.invalidate_project_cache()
-    local root_status = project.find_status_file(root)
-    local skip_file = root_status and vim.fn.fnamemodify(root_status, ":t") or nil
-    local tree = status.build_project_tree(root, skip_file)
-    local items = flatten_tree(tree)
-
-    -- Apply filter if provided
-    if opts.filter then
-        items = filter_by_state(items, opts.filter)
-    end
-
-    if #items == 0 then
-        local filter_msg = opts.filter and (" with state: " .. (type(opts.filter) == "table" and table.concat(opts.filter, ", ") or opts.filter)) or ""
-        vim.notify("No project items found" .. filter_msg .. ".", vim.log.levels.INFO)
-        return
-    end
-
-    -- Build display strings
-    local display_items = {}
-    for _, item in ipairs(items) do
-        table.insert(display_items, format_item(item))
-    end
-
-    vim.ui.select(display_items, {
-        prompt = "Project Items" .. (opts.filter and (" [" .. (type(opts.filter) == "table" and table.concat(opts.filter, ",") or opts.filter) .. "]") or "") .. ":",
-        kind = "neorg_pm_pick",
-    }, function(_, idx)
-        if idx then
-            jump_to_item(items[idx], root)
-        end
-    end)
-end
-
 --- Open the state filter picker, then show items matching the selected state.
 function M.pick_by_state()
     local states = {
@@ -217,6 +171,121 @@ function M.pick_by_state()
     }, function(_, idx)
         if idx then
             M.pick({ filter = states[idx].name })
+        end
+    end)
+end
+
+--- Open the owner filter picker, then show items owned by the selected owner.
+function M.pick_by_owner()
+    local buf = vim.api.nvim_get_current_buf()
+    local filepath = vim.api.nvim_buf_get_name(buf)
+    local root = project.find_root(filepath)
+
+    if not root then
+        vim.notify("No project root found.", vim.log.levels.ERROR)
+        return
+    end
+
+    local fields = require("neorg-project-manager.fields")
+    local owners = fields.get_project_owners(root)
+
+    if #owners == 0 then
+        vim.notify("No Owner: fields found in project files.", vim.log.levels.INFO)
+        return
+    end
+
+    vim.ui.select(owners, {
+        prompt = "Filter by owner:",
+    }, function(owner)
+        if owner then
+            M.pick({ owner = owner })
+        end
+    end)
+end
+
+--- Open the project item picker.
+--- @param opts table|nil  {filter = string|string[]|nil, owner = string|nil}
+function M.pick(opts)
+    opts = opts or {}
+    local buf = vim.api.nvim_get_current_buf()
+    local filepath = vim.api.nvim_buf_get_name(buf)
+    local root = project.find_root(filepath)
+
+    if not root then
+        vim.notify("No project root found.", vim.log.levels.ERROR)
+        return
+    end
+
+    index.invalidate_project_cache()
+    local root_status = project.find_status_file(root)
+    local skip_file = root_status and vim.fn.fnamemodify(root_status, ":t") or nil
+    local tree = status.build_project_tree(root, skip_file)
+    local items = flatten_tree(tree)
+
+    -- Apply state filter if provided
+    if opts.filter then
+        items = filter_by_state(items, opts.filter)
+    end
+
+    -- Apply owner filter if provided
+    if opts.owner then
+        local fields_mod = require("neorg-project-manager.fields")
+        local filtered = {}
+        local entries = project.scan(root)
+
+        -- Build prefix → owner map
+        local prefix_owners = {}
+        for _, entry in ipairs(entries) do
+            if not entry.is_dir then
+                local lines = vim.fn.readfile(entry.filepath)
+                local data = fields_mod.extract_from_lines(lines)
+                if data.owner then
+                    prefix_owners[entry.prefix] = data.owner
+                end
+            end
+        end
+
+        for _, item in ipairs(items) do
+            local item_owner = prefix_owners[item.prefix] or ""
+            if item_owner:find(opts.owner, 1, true) then
+                table.insert(filtered, item)
+            end
+        end
+        items = filtered
+    end
+
+    if #items == 0 then
+        local msg = "No project items found"
+        if opts.filter then
+            msg = msg .. " with state: " .. (type(opts.filter) == "table" and table.concat(opts.filter, ", ") or opts.filter)
+        end
+        if opts.owner then
+            msg = msg .. " owned by: " .. opts.owner
+        end
+        vim.notify(msg .. ".", vim.log.levels.INFO)
+        return
+    end
+
+    -- Build display strings
+    local display_items = {}
+    for _, item in ipairs(items) do
+        table.insert(display_items, format_item(item))
+    end
+
+    local prompt_parts = { "Project Items" }
+    if opts.filter then
+        table.insert(prompt_parts, "[" .. (type(opts.filter) == "table" and table.concat(opts.filter, ",") or opts.filter) .. "]")
+    end
+    if opts.owner then
+        table.insert(prompt_parts, "[" .. opts.owner .. "]")
+    end
+
+    vim.ui.select(display_items, {
+        prompt = table.concat(prompt_parts, " ") .. ":",
+        kind = "neorg_pm_pick",
+    }, function(_, idx)
+        if idx then
+            jump_to_item(items[idx], root)
         end
     end)
 end

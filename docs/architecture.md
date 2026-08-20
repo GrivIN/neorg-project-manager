@@ -9,8 +9,11 @@ lua/neorg-project-manager/
 ├── helpers.lua     Tree-sitter utilities, link patterns, sorting, scandir
 ├── numbering.lua   Number formatting, parsing, renumbering
 ├── hop.lua         Link resolution (<CR> override)
+├── sections.lua    Generic section detection engine (list + value fields)
+├── prereqs.lua     Prerequisite tracking virtual text (uses sections.lua)
+├── outcomes.lua    Outcome/deliverable tracking virtual text (uses sections.lua)
+├── fields.lua      Owner/Effort extraction, aggregation (uses sections.lua)
 ├── mixed.lua       Mixed-type progress virtual text
-├── prereqs.lua     Prerequisite tracking virtual text
 ├── project.lua     Project root detection, file scanning
 ├── index.lua       Cross-file index with lazy loading + caching
 ├── status.lua      Status tree generation and surgical updates
@@ -18,7 +21,7 @@ lua/neorg-project-manager/
 ├── fold.lua        Fold expression + toggle for status files
 ├── extract.lua     Extract heading into its own .norg file
 ├── breadcrumb.lua  Heading path display (statusline/winbar/virtual text)
-├── picker.lua      Browse/filter project items by status
+├── picker.lua      Browse/filter project items by status/owner
 ├── bidir.lua       Bidirectional status propagation
 ├── scaffold.lua    Project initialization (:NeorgPMInit)
 └── health.lua      :checkhealth integration
