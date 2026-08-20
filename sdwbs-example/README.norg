@@ -37,15 +37,22 @@
 
    - `(?|-)` — /In progress + uncertain/: work is happening but direction
      or scope needs clarification
-   - `(=|-)` — /On hold + pending/: some work is done but further
-     progress is blocked by an external dependency
    - `(=|?)` — /On hold + uncertain/: paused, and the timeline or path
      forward is unclear
+   - `(!|-)` — /In progress + urgent/: active work that needs immediate
+     attention (note: `!` does not propagate to parents)
 
    The plugin determines which state is /primary/ (drives aggregation)
    and which is a /qualifier/ (adds context) based on semantic role —
-   not position in the marker. Qualifiers are `(?)` ambiguous and `(!)`
-   important; everything else is a primary state.
+   not position in the marker:
+
+   - *Primary states:* `( )` undone, `(-)` pending, `(x)` done,
+     `(=)` on hold, `(_)` cancelled
+   - *Qualifiers:* `(?)` ambiguous, `(!)` important
+
+   Only qualifiers can be combined with a primary state. Two primary
+   states (e.g. `(=|-)`) are NOT valid compounds — use one primary
+   state and express the nuance via qualifier or description text.
 
    /Ordering note:/ Due to the norg parser, characters `-`, `_`, and `!`
    cannot appear first in a compound marker (they double as inline
@@ -69,6 +76,11 @@
    Compound markers are optional. A plain `(-)` is always valid and
    means the same as it always did — only add qualifiers when the
    extra context is genuinely useful.
+
+   Examples in this project:
+   - `(=|?) 42.5.3.` — on hold + uncertain when SDK will be ready
+   - `(=|?) 42.11.5.` — on hold + uncertain legal timeline
+   - `(?|-) 42.8.` — in progress + has ambiguous child (Event Bus)
 
 
 ** 1.2. Element Type Tags

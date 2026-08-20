@@ -702,11 +702,11 @@ Combine a primary state with a qualifier using norg's `|` pipe syntax:
 |--------|---------|
 | `(?|-)` | In progress + uncertain |
 | `(=|?)` | On hold + uncertain |
-| `(=|-)` | On hold + partially in progress |
+| `(!|-)` | In progress + urgent (local, doesn't propagate) |
 
-The plugin determines primary vs qualifier by semantic role (not position).
-`(?|-)` and `(-|?)` are equivalent — though only `(?|-)` parses correctly
-due to norg scanner constraints. The plugin handles ordering automatically.
+Only `?` (ambiguous) and `!` (important) are valid qualifiers. Two primary
+states together (e.g., `(=|-)`) are not valid — use description text or the
+prerequisite system to express "blocked" relationships.
 
 See [Architecture docs](docs/architecture.md) for full details.
 

@@ -115,9 +115,13 @@ uses this to combine a primary state with qualifiers.
 ### Valid combinations
 
 - `(?|-)` — in progress + uncertain
-- `(=|-)` — on hold + in progress (partially blocked)
 - `(=|?)` — on hold + uncertain
+- `(!|-)` — in progress + urgent (local, doesn't propagate)
 - `(x|?)` — done + uncertain (rare)
+
+Only `?` (ambiguous) and `!` (important) are valid qualifiers. Two primary
+states together (e.g., `(=|-)`) are not valid compounds — they would be
+treated as just the first primary found, with the second silently discarded.
 
 ### Role-based parsing
 
@@ -146,6 +150,7 @@ The plugin handles this automatically when rendering:
 | cancelled + ambiguous | `(?|_)` | `_` unsafe first → qualifier goes first |
 | on_hold + ambiguous | `(=|?)` | `=` safe first → normal order |
 | done + ambiguous | `(x|?)` | `x` safe first → normal order |
+| pending + important | `(!|-)` | `-` unsafe first → qualifier goes first (but `!` is also unsafe — fallback: drops qualifier, renders `-`) |
 
 If no safe ordering exists (e.g., both primary and all qualifiers are unsafe),
 the plugin falls back to rendering the primary state alone (drops qualifiers).

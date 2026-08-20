@@ -38,7 +38,7 @@
 
 ** Notifications Stage 1 — Push Notifications
 
-   {* 42.4.1} is `(=|-)` in progress + on hold. Blocked by:
+   {* 42.4.1} is `(-)` in progress. Blocked by:
 
    ~ {* 42.11.5} Legal — Privacy Policy Review `(=|?)` on hold + uncertain
      Blocks: Stage 1 Validation sign-off (cannot ship without legal approval)

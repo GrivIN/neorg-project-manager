@@ -83,14 +83,13 @@
    - (x) {* 42.8.2} UI Component Library — design system tokens
 
 
-** (=|-) 42.4. [feature] Notifications {* 42.4}
+** (-) 42.4. [feature] Notifications {* 42.4}
 
    Owner: @backend-team
    Effort: M (3-4 sprints across 2 stages)
    Push notifications and scheduled email digests.
 
    /Detailed breakdown in companion file: `42.4. Notifications.norg`/
-   /Partially blocked by {* 42.11.5} Legal — Privacy Policy Review./
 
    Pre-requisites:
    - (x) {* 42.1} Authentication — user identity and push token registration

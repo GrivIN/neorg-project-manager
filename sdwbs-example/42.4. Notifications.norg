@@ -1,11 +1,8 @@
-* (=|-) 42.4. [feature] Notifications {* 42.4}
+* (-) 42.4. [feature] Notifications {* 42.4}
 
   Push notifications for real-time events and scheduled email digests
   for activity summaries. Pluggable delivery channels with per-user
   preference management.
-
-  /Partially blocked: {* 42.11.5} Legal — Privacy Policy Review must
-  complete before Validation sign-off can proceed./
 
   Pre-requisites:
   - (x) {* 42.1} Authentication — user identity and push token registration
