@@ -38,9 +38,9 @@
 
 ** Notifications Stage 1 — Push Notifications
 
-   {* 42.4.1} is `(-)` in progress. Blocked by:
+   {* 42.4.1} is `(=|-)` in progress + on hold. Blocked by:
 
-   ~ {* 42.11.5} Legal — Privacy Policy Review `(=)` on hold
+   ~ {* 42.11.5} Legal — Privacy Policy Review `(=|?)` on hold + uncertain
      Blocks: Stage 1 Validation sign-off (cannot ship without legal approval)
    ~ Mobile: rich notification content `(-)` and preference screen `( )`
      Blocks: Stage 1 Verification (mobile test suites incomplete)
@@ -60,7 +60,7 @@
 
    Downstream impact:
    - {* 42.5} Dashboard depends on SDK for typed API calls
-   - {* 42.5.3} Custom Report Builder is `(=)` on hold waiting for SDK
+   - {* 42.5.3} Custom Report Builder is `(=|?)` on hold + uncertain, waiting for SDK
 
 
 ** CDN — Content Delivery Network
@@ -78,7 +78,7 @@
 ** Summary: Critical Chain
 
    @code
-   Legal Review (=) ──────────────► Notifications Validation
+   Legal Review (=|?) ─────────────► Notifications Validation
                                           │
    Design Handoff Chat (-) ──► Chat FE/Mobile ──► Chat Validation
                                           │

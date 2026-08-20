@@ -77,22 +77,21 @@ Call setup explicitly if not using lazy.nvim's `opts`: >lua
 
                                         *:NeorgPMStatus*
 :NeorgPMStatus
-    Update the current `project.norg` or `index.norg` buffer with current
-    project state. Uses surgical update on populated files (only modifies
-    managed headings). Uses full generation on empty files.
+    Update the current status file buffer with current project state.
+    Uses surgical update on populated files (only modifies managed
+    headings). Uses full generation on empty files.
 
                                         *:NeorgPMStatusAll*
 :NeorgPMStatusAll
-    Regenerate all `index.norg` files and `project.norg` across the entire
-    project tree.
+    Regenerate all status files across the entire project tree.
 
                                         *:NeorgPMToggle*
 :NeorgPMToggle
     Toggle body/description folds in the current heading's subtree.
     Hides all non-heading content (descriptions, lists, notes) while
     keeping all headings visible at every level. Shows the tree skeleton.
-    Press again to reveal all body content. Only active in `project.norg`
-    and `index.norg` buffers where folds are set up.
+    Press again to reveal all body content. Only active in status file
+    buffers where folds are set up.
 
                                         *:NeorgPMToggleAll*
 :NeorgPMToggleAll
@@ -116,6 +115,25 @@ Call setup explicitly if not using lazy.nvim's `opts`: >lua
     children below → creates `1.1.1. Auth.norg` with those children
     shifted to `*` level.
 
+                                        *:NeorgPMPick*
+:NeorgPMPick [{state}]
+    Browse all project items in a picker. Optional {state} argument
+    filters by status: undone, pending, done, on_hold, cancelled,
+    ambiguous, important. Uses `vim.ui.select` — works with telescope
+    via dressing.nvim or similar UI overrides.
+
+                                        *:NeorgPMPickByState*
+:NeorgPMPickByState
+    Two-step picker: first choose a status to filter by, then browse
+    the matching items.
+
+                                        *:NeorgPMInit*
+:NeorgPMInit
+    Initialize a new project in the current directory. Prompts for
+    project name and starting WBS number, then creates a numbered
+    root status file (e.g., `1. My Project.norg`). If a project
+    already exists, opens its status file instead.
+
 ==============================================================================
 5. KEYBINDS                             *neorg-project-manager-keybinds*
 
@@ -129,6 +147,9 @@ All keybinds are buffer-local to norg files.
     <LocalLeader>pt     |:NeorgPMToggle| (body folds — headings only)
     <LocalLeader>pT     |:NeorgPMToggleAll| (full fold — collapse all)
     <LocalLeader>pe     |:NeorgPMExtract|
+    <LocalLeader>pp     |:NeorgPMPick| (browse project items)
+    <LocalLeader>pP     |:NeorgPMPickByState| (browse by status filter)
+    <LocalLeader>pi     |:NeorgPMInit| (initialize project)
     <CR>                Number-aware link hop (falls back to Neorg native hop)
 
 Disable default keybinds: >lua

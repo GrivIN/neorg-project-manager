@@ -1,6 +1,7 @@
-* SDWBS Conventions
+* 1. sdWbs Conventions
+  Software Development Work Breakdown System
 
-** Status Markers
+** 1.1. Status Markers
 
    Norg provides a full set of TODO status markers. The SDWBS uses all
    of them to express different element states:
@@ -28,7 +29,49 @@
      recalculates from remaining active children
 
 
-** Element Type Tags
+** 1.1.1. Compound Status Markers
+
+   Norg allows multiple modifiers in a single extension, separated by
+   `|` (pipe). The SDWBS uses this to combine a primary state with a
+   qualifier that adds nuance:
+
+   - `(?|-)` — /In progress + uncertain/: work is happening but direction
+     or scope needs clarification
+   - `(=|-)` — /On hold + pending/: some work is done but further
+     progress is blocked by an external dependency
+   - `(=|?)` — /On hold + uncertain/: paused, and the timeline or path
+     forward is unclear
+
+   The plugin determines which state is /primary/ (drives aggregation)
+   and which is a /qualifier/ (adds context) based on semantic role —
+   not position in the marker. Qualifiers are `(?)` ambiguous and `(!)`
+   important; everything else is a primary state.
+
+   /Ordering note:/ Due to the norg parser, characters `-`, `_`, and `!`
+   cannot appear first in a compound marker (they double as inline
+   formatting characters). The plugin automatically places qualifiers
+   before these characters when rendering — e.g. pending + ambiguous
+   renders as `(?|-)` rather than `(-|?)`. When reading, both orders
+   are handled identically.
+
+   Propagation rules:
+   - `(?)` /ambiguous/ propagates upward: if any child has `(?)` as
+     primary or qualifier, the parent receives it as a qualifier.
+     Example: 3 children `(x)`, `(x)`, `(?|-)` → parent is `(?|-)`.
+   - `(!)` /urgent/ is local only — it marks individual items for
+     attention but does not propagate to parents.
+   - `(_)` /cancelled/ items are excluded from parent calculation
+     entirely. Counts and totals reflect only active items.
+
+   When all active children are ambiguous, the parent's primary state
+   becomes `(?)` directly (no qualifier needed).
+
+   Compound markers are optional. A plain `(-)` is always valid and
+   means the same as it always did — only add qualifiers when the
+   extra context is genuinely useful.
+
+
+** 1.2. Element Type Tags
 
    Every WBS element carries a type tag in square brackets:
 
@@ -47,7 +90,7 @@
    stages when they have independent release cycles.
 
 
-** Section Patterns — Feature Lifecycle
+** 1.3. Section Patterns — Feature Lifecycle
 
    Feature modules (`[feature]`) decompose each stage into four phases:
 
@@ -60,7 +103,7 @@
    records aggregated counts in the Implementation phase./
 
 
-** Implementation Sub-domains
+** 1.4. Implementation Sub-domains
 
    Implementation splits into platform sub-domains at one heading level
    deeper than the phase:
@@ -89,7 +132,7 @@
    @end
 
 
-** Task Items & Acceptance Criteria
+** 1.5. Task Items & Acceptance Criteria
 
    Tasks are status-marked bullets under each platform sub-domain.
    Acceptance criteria (AC) are optional nested sub-bullets that define
@@ -109,7 +152,7 @@
    - Bug fixes may be aggregated: "Bug fixes (N items)"
 
 
-** Stage Naming
+** 1.6. Stage Naming
 
    - `Stage 1` through `Stage N` — planned and committed release scopes
    - `Future` — aspirational items not yet scheduled for any stage
@@ -122,14 +165,14 @@
    (e.g. a module may have Stage 1 and Stage 3 with no Stage 2 entry).
 
 
-** Numbering Context
+** 1.7. Numbering Context
 
    A project's WBS number can start at any value (e.g. `42.` instead of
    `1.`). This supports embedding the SDWBS within a larger organisational
    WBS where the project is one node in a programme-level tree.
 
 
-** Companion Files
+** 1.8. Companion Files
 
    When a module spans multiple stages with significant detail, its
    content moves to a companion file named after its WBS number
@@ -142,7 +185,7 @@
    - Module is frequently updated independently
 
 
-** Cross-references
+** 1.9. Cross-references
 
    WBS elements use anchors `{* 42.1.2}` for dependency tracking.
    Pre-requisites list forward dependencies (what this element needs).
@@ -150,7 +193,7 @@
    via editor tooling (e.g. norg backlink navigation).
 
 
-** Ownership
+** 1.10. Ownership
 
    Each feature or module may include an `Owner:` field in its
    description (e.g. `Owner: @backend-team`). This identifies the
@@ -165,7 +208,7 @@
    generated to show each team's slice of the WBS tree.
 
 
-** Extra Fields
+** 1.11. Extra Fields
 
    Nodes may carry additional metadata fields as plain-text lines
    in their description:
@@ -179,7 +222,7 @@
    They exist to provide context for project planning and reporting.
 
 
-** External Dependencies
+** 1.12. External Dependencies
 
    External blockers (design handoffs, legal reviews, third-party
    approvals) are tracked as their own WBS subtree using the `[ext]`
@@ -201,7 +244,7 @@
    @end
 
 
-** Filtered Views
+** 1.13. Filtered Views
 
    The SDWBS supports multiple /view files/ — projections of the same
    data filtered by different criteria. These are separate `.norg` files
@@ -216,7 +259,7 @@
    source nodes and do not duplicate content.
 
 
-** Scaling
+** 1.14. Scaling
 
    The SDWBS scales by splitting nodes into companion files. Any node
    can be extracted into its own file when it grows beyond ~80 lines.

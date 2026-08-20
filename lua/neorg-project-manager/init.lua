@@ -28,6 +28,9 @@ local rename = require("neorg-project-manager.rename")
 local fold = require("neorg-project-manager.fold")
 local extract = require("neorg-project-manager.extract")
 local breadcrumb = require("neorg-project-manager.breadcrumb")
+local picker = require("neorg-project-manager.picker")
+local bidir = require("neorg-project-manager.bidir")
+local scaffold = require("neorg-project-manager.scaffold")
 
 --- Default configuration for the plugin.
 --- Users can override any of these in their lazy.nvim `opts` table.
@@ -352,6 +355,28 @@ function M.setup(opts)
         local buf = vim.api.nvim_get_current_buf()
         extract.extract(buf)
     end, { desc = "Extract heading into its own file" })
+
+    --- Browse project items with optional status filtering.
+    vim.api.nvim_create_user_command("NeorgPMPick", function(cmd_opts)
+        local filter = cmd_opts.args ~= "" and cmd_opts.args or nil
+        picker.pick({ filter = filter })
+    end, {
+        desc = "Browse project items (optional: filter by state name)",
+        nargs = "?",
+        complete = function()
+            return { "undone", "pending", "done", "on_hold", "cancelled", "ambiguous", "important" }
+        end,
+    })
+
+    --- Browse project items filtered by a picked status.
+    vim.api.nvim_create_user_command("NeorgPMPickByState", function()
+        picker.pick_by_state()
+    end, { desc = "Browse project items filtered by status" })
+
+    --- Initialize a new project in the current directory.
+    vim.api.nvim_create_user_command("NeorgPMInit", function()
+        scaffold.init()
+    end, { desc = "Initialize a new project with a root status file" })
 end
 
 --- Attach the plugin to a norg buffer.
@@ -404,6 +429,12 @@ function M.attach(buf)
             { buffer = buf, desc = "Toggle full fold (collapse all)" })
         vim.keymap.set("n", prefix .. "e", "<cmd>NeorgPMExtract<CR>",
             { buffer = buf, desc = "Extract heading to file" })
+        vim.keymap.set("n", prefix .. "p", "<cmd>NeorgPMPick<CR>",
+            { buffer = buf, desc = "Browse project items" })
+        vim.keymap.set("n", prefix .. "P", "<cmd>NeorgPMPickByState<CR>",
+            { buffer = buf, desc = "Browse items by status" })
+        vim.keymap.set("n", prefix .. "i", "<cmd>NeorgPMInit<CR>",
+            { buffer = buf, desc = "Initialize project" })
     end
 
     -- Fire User event for extensibility
@@ -461,9 +492,33 @@ function M.attach(buf)
                     numbering.renumber(buf)
                     M.refresh_virtual_text(buf)
                 end
+                -- Snapshot status file state for bidirectional propagation
+                local fp = vim.api.nvim_buf_get_name(buf)
+                if fp ~= "" and project.is_status_file(fp) then
+                    bidir.snapshot(buf)
+                end
             end,
         })
     end
+
+    -- Bidirectional propagation: after saving a status file, propagate manual
+    -- state changes back to source files, then refresh the status file's
+    -- progress counts to reflect the new state.
+    vim.api.nvim_create_autocmd("BufWritePost", {
+        buffer = buf,
+        group = vim.api.nvim_create_augroup("NeorgPM_Bidir_" .. buf, { clear = true }),
+        callback = function()
+            local fp = vim.api.nvim_buf_get_name(buf)
+            if fp ~= "" and project.is_status_file(fp) then
+                local changed = bidir.propagate(buf)
+                if changed then
+                    -- Re-run surgical update to refresh progress counts [done/total]
+                    -- since source files were just modified by propagation
+                    status.update(buf)
+                end
+            end
+        end,
+    })
 
     -- Track heading modifications for renumber-on-leave
     if M.config.renumber_on_heading_leave then

@@ -24,40 +24,97 @@ local helpers = require("neorg-project-manager.helpers")
 
 --- Aggregate todo state from a list of child states.
 ---
---- @param child_states string[]  List of state strings
---- @return string state          Aggregated state
---- @return number done           Count of done children
---- @return number total          Count of total children
+--- Rules:
+---   - Cancelled children are excluded from the active pool (don't inflate totals).
+---   - If every child is cancelled, the parent is cancelled with 0/0.
+---   - All active ambiguous → primary is ambiguous (no qualifier needed).
+---   - Otherwise, ambiguous propagates as a qualifier: if any active child has
+---     ambiguous as primary state or qualifier, the parent gets an ambiguous qualifier.
+---   - Important is local-only: treated as undone for aggregation purposes.
+---   - All active done → done.
+---   - All active on_hold (or on_hold + ambiguous) → on_hold.
+---   - Any done or pending among active → pending.
+---   - Otherwise → undone.
+---
+--- Accepts either plain state strings (backward compatible) or tables with
+--- {state = string, qualifiers = string[]}.
+---
+--- @param child_states (string|{state: string, qualifiers: string[]})[]
+--- @return string state          Aggregated primary state
+--- @return number done           Count of done children (active only)
+--- @return number total          Count of active children (excludes cancelled)
+--- @return string[] qualifiers   Propagated qualifier list (e.g., {"ambiguous"})
 function M.aggregate_state(child_states)
-    local counts = { done = 0, undone = 0, pending = 0, on_hold = 0, cancelled = 0 }
+    local counts = { done = 0, undone = 0, pending = 0, on_hold = 0, cancelled = 0, ambiguous = 0 }
     local total = 0
+    local has_ambiguous_qualifier = false
 
-    for _, state in ipairs(child_states) do
+    for _, child in ipairs(child_states) do
+        local state, qualifiers
+        if type(child) == "table" then
+            state = child.state
+            qualifiers = child.qualifiers or {}
+        else
+            state = child
+            qualifiers = {}
+        end
+
         if state then
             total = total + 1
-            if counts[state] then
+            if counts[state] ~= nil then
                 counts[state] = counts[state] + 1
             else
+                -- important, recurring, and any unknown states count as undone
                 counts.undone = counts.undone + 1
+            end
+        end
+
+        -- Track ambiguous from qualifiers
+        for _, q in ipairs(qualifiers) do
+            if q == "ambiguous" then
+                has_ambiguous_qualifier = true
             end
         end
     end
 
     if total == 0 then
-        return "undone", 0, 0
+        return "undone", 0, 0, {}
     end
 
+    -- Exclude cancelled from active pool
+    local active = total - counts.cancelled
     local done = counts.done
 
-    if done == total then
-        return "done", done, total
-    elseif counts.on_hold + counts.cancelled == total then
-        return "on_hold", done, total
-    elseif done > 0 or counts.pending > 0 then
-        return "pending", done, total
-    else
-        return "undone", done, total
+    -- All items cancelled → parent is cancelled
+    if active == 0 then
+        return "cancelled", 0, 0, {}
     end
+
+    -- All active items are ambiguous → primary is ambiguous (no qualifier)
+    if counts.ambiguous == active then
+        return "ambiguous", done, active, {}
+    end
+
+    -- Compute primary state (ambiguous items count as "not done" for primary)
+    local primary
+    if done == active then
+        primary = "done"
+    elseif counts.on_hold + counts.ambiguous == active then
+        -- All active items are either on_hold or ambiguous
+        primary = "on_hold"
+    elseif done > 0 or counts.pending > 0 then
+        primary = "pending"
+    else
+        primary = "undone"
+    end
+
+    -- Collect propagated qualifiers
+    local agg_qualifiers = {}
+    if counts.ambiguous > 0 or has_ambiguous_qualifier then
+        table.insert(agg_qualifiers, "ambiguous")
+    end
+
+    return primary, done, active, agg_qualifiers
 end
 
 --- Convert a state name to its norg character.
@@ -69,6 +126,89 @@ local function state_to_char(state)
         cancelled = "_", important = "!", recurring = "+", ambiguous = "?",
     }
     return map[state] or " "
+end
+
+--- Valid norg todo characters for marker detection.
+local valid_todo_chars = {
+    ["x"] = true, [" "] = true, ["-"] = true, ["="] = true,
+    ["_"] = true, ["!"] = true, ["+"] = true, ["?"] = true,
+}
+
+--- Check if a string inside parentheses is a valid todo marker.
+--- Handles both single-char `(x)` and compound `(-|?)` markers.
+--- @param inner string  Content between parentheses
+--- @return boolean
+local function is_todo_marker(inner)
+    for part in (inner .. "|"):gmatch("([^|]*)|") do
+        if #part ~= 1 or not valid_todo_chars[part] then
+            return false
+        end
+    end
+    return #inner > 0
+end
+
+--- Characters that the norg scanner also treats as attached modifiers
+--- (strikethrough, underline, spoiler). These CANNOT be the first character
+--- in a compound marker — the scanner refuses to emit a `|` delimiter after them.
+--- When rendering, qualifiers are placed before these characters.
+local unsafe_first_chars = { ["-"] = true, ["_"] = true, ["!"] = true }
+
+--- Build the inner content of a norg todo marker from state + qualifiers.
+--- Returns single char for simple states, pipe-delimited for compound.
+--- Automatically reorders to avoid parser-unsafe first characters:
+--- e.g., pending + ambiguous renders as `?|-` (not `-|?` which fails to parse).
+--- If no safe ordering exists (all chars are unsafe), drops qualifiers and
+--- renders the primary alone.
+--- @param state string          Primary state name
+--- @param qualifiers string[]|nil  Optional qualifier state names
+--- @return string               e.g., "-" or "?|-"
+local function build_marker_inner(state, qualifiers)
+    if not qualifiers or #qualifiers == 0 then
+        return state_to_char(state)
+    end
+
+    local primary_char = state_to_char(state)
+    local qual_chars = {}
+    for _, q in ipairs(qualifiers) do
+        table.insert(qual_chars, state_to_char(q))
+    end
+
+    if not unsafe_first_chars[primary_char] then
+        -- Primary is safe first — normal order: primary|qual1|qual2
+        local parts = { primary_char }
+        for _, qc in ipairs(qual_chars) do table.insert(parts, qc) end
+        return table.concat(parts, "|")
+    end
+
+    -- Primary is unsafe first — find a safe qualifier to put first
+    local safe_idx = nil
+    for i, qc in ipairs(qual_chars) do
+        if not unsafe_first_chars[qc] then
+            safe_idx = i
+            break
+        end
+    end
+
+    if safe_idx then
+        -- Put the safe qualifier first, then the rest
+        local parts = { qual_chars[safe_idx] }
+        for i, qc in ipairs(qual_chars) do
+            if i ~= safe_idx then table.insert(parts, qc) end
+        end
+        table.insert(parts, primary_char)
+        return table.concat(parts, "|")
+    end
+
+    -- No safe character exists at all — drop qualifiers to avoid parse failure
+    return primary_char
+end
+
+--- Build the full norg todo marker string including parentheses.
+--- @param state string          Primary state name
+--- @param qualifiers string[]|nil  Optional qualifier state names
+--- @return string               e.g., "(-)" or "(?|-)"
+local function build_norg_marker(state, qualifiers)
+    return "(" .. build_marker_inner(state, qualifiers) .. ")"
 end
 
 ---------------------------------------------------------------------------
@@ -101,13 +241,15 @@ function M.build_directory_tree(dir_path, skip_file)
                 local child_tree = M.build_directory_tree(full_path)
                 table.insert(entries, {
                     prefix = prefix, title = title, state = child_tree.state,
+                    qualifiers = child_tree.qualifiers or {},
                     is_dir = true, filepath = nil, children = child_tree.children,
                     done = child_tree.done, total = child_tree.total,
                 })
             elseif entry_type == "file" and name:match("%.norg$") then
-                local file_state = index.get_file_state(full_path, prefix)
+                local file_state, file_qualifiers = index.get_file_state(full_path, prefix)
                 table.insert(entries, {
                     prefix = prefix, title = title, state = file_state,
+                    qualifiers = file_qualifiers or {},
                     is_dir = false, filepath = full_path, children = {},
                     done = 0, total = 0,
                 })
@@ -119,15 +261,18 @@ function M.build_directory_tree(dir_path, skip_file)
         return helpers.natural_sort_prefixes(a.prefix or "", b.prefix or "")
     end)
 
-    local child_states = {}
-    for _, entry in ipairs(entries) do table.insert(child_states, entry.state) end
-    local agg_state, done, total = M.aggregate_state(child_states)
+    local child_entries = {}
+    for _, entry in ipairs(entries) do
+        table.insert(child_entries, { state = entry.state, qualifiers = entry.qualifiers or {} })
+    end
+    local agg_state, done, total, agg_qualifiers = M.aggregate_state(child_entries)
 
     local dir_name = vim.fn.fnamemodify(dir_path, ":t")
     local dir_prefix, dir_title = project.extract_prefix(dir_name)
 
     return {
         prefix = dir_prefix, title = dir_title or dir_name, state = agg_state,
+        qualifiers = agg_qualifiers or {},
         is_dir = true, filepath = nil, children = entries, done = done, total = total,
     }
 end
@@ -161,7 +306,7 @@ function M.render_as_norg(tree, opts)
         if level > max_depth then return end
 
         local stars = string.rep("*", level)
-        local todo_str = node.state and (" (" .. state_to_char(node.state) .. ")") or ""
+        local todo_str = node.state and (" " .. build_norg_marker(node.state, node.qualifiers)) or ""
         local title_sep = config.get("number_title_separator", ". ")
         local title_str = node.prefix and (" " .. node.prefix .. title_sep .. node.title) or (" " .. node.title)
         local link_str = node.prefix and (" {* " .. node.prefix .. "}") or ""
@@ -183,7 +328,7 @@ end
 ---------------------------------------------------------------------------
 
 --- Build a flat map of project entries with their states.
---- Returns { number → { state, done, total, title, is_dir } }
+--- Returns { number → { state, qualifiers, done, total, title, is_dir } }
 ---
 --- @param scope_path string   Directory to scan
 --- @param scope_type string   "project" (full recursive) or "index" (direct children)
@@ -204,6 +349,7 @@ local function build_entry_states(scope_path, scope_type, skip_file)
         if node.prefix then
             result[node.prefix] = {
                 state = node.state,
+                qualifiers = node.qualifiers or {},
                 done = node.done,
                 total = node.total,
                 title = node.title,
@@ -222,12 +368,12 @@ end
 
 --- Build a new managed heading line for insertion.
 ---
---- @param entry table    {state, done, total, title, is_dir, prefix}
+--- @param entry table    {state, qualifiers, done, total, title, is_dir, prefix}
 --- @param level number   Heading level (number of stars)
 --- @return string        Complete norg heading line
 local function build_managed_heading_line(entry, level)
     local stars = string.rep("*", level)
-    local todo_str = entry.state and (" (" .. state_to_char(entry.state) .. ")") or ""
+    local todo_str = entry.state and (" " .. build_norg_marker(entry.state, entry.qualifiers)) or ""
     local title_sep = config.get("number_title_separator", ". ")
     local title_str = " " .. entry.prefix .. title_sep .. entry.title
     local link_str = " {* " .. entry.prefix .. "}"
@@ -237,22 +383,21 @@ end
 
 --- Update a single managed heading line with new state and count.
 --- Returns the updated line text, or nil if no change needed.
+--- Handles both simple `(x)` and compound `(-|?)` todo markers.
 ---
 --- @param line string       Current line text
---- @param new_state string  New state character (e.g., "x", "-", " ")
+--- @param new_marker string New marker inner content (e.g., "x", "-", "-|?")
 --- @param new_count string|nil  New count text (e.g., "[3/5]") or nil for no count
 --- @return string|nil       Updated line, or nil if unchanged
-local function update_managed_line(line, new_state, new_count)
+local function update_managed_line(line, new_marker, new_count)
     local updated = line
 
-    -- Update the todo state character: find (X) pattern and replace
-    -- Uses %b() to match balanced parentheses, then check if it's a single-char todo state
+    -- Update the todo state: find parenthesized todo marker and replace
     updated = updated:gsub("%b()", function(match)
         local inner = match:sub(2, -2)
-        if #inner == 1 then
-            -- Single char in parens = todo state marker
-            if inner ~= new_state then
-                return "(" .. new_state .. ")"
+        if is_todo_marker(inner) then
+            if inner ~= new_marker then
+                return "(" .. new_marker .. ")"
             end
         end
         return match
@@ -283,7 +428,7 @@ end
 --- Pass 2: Inserts headings for entries not yet represented.
 ---
 --- @param lines string[]       Lines of norg content
---- @param entry_states table   Map of number → {state, done, total, title, is_dir}
+--- @param entry_states table   Map of number → {state, qualifiers, done, total, title, is_dir}
 --- @param scope_path string    Directory path (for computing heading levels)
 --- @param scope_type string    "project" or "index"
 --- @return string[] lines      The (potentially modified) lines
@@ -299,9 +444,9 @@ local function apply_status_updates(lines, entry_states, scope_path, scope_type)
             represented[number] = true
             local entry = entry_states[number]
 
-            local new_state = state_to_char(entry.state)
+            local new_marker = build_marker_inner(entry.state, entry.qualifiers)
             local new_count = entry.total > 0 and string.format("[%d/%d]", entry.done, entry.total) or nil
-            local updated_line = update_managed_line(line, new_state, new_count)
+            local updated_line = update_managed_line(line, new_marker, new_count)
 
             if updated_line then
                 lines[i] = updated_line

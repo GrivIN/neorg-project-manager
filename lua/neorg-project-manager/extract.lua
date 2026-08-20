@@ -1,16 +1,16 @@
 --- neorg-project-manager.extract: Extract a heading's content into its own file.
 ---
---- Takes a heading in project.norg/index.norg (or any .norg file) and extracts
+--- Takes a heading in a status file (or any .norg file) and extracts
 --- its children into a standalone .norg file. The heading line stays in place
 --- (with its {* number} link for navigation), and the content below it moves
 --- to the new file with heading levels shifted to start from *.
 ---
 --- Example:
----   project.norg has: *** (-) 1.1.1. Auth {* 1.1.1}
----                     **** (-) 1.1.1.1. Login {* 1.1.1.1}
----                     ***** (x) 1.1.1.1.1. Design
+---   status file has: *** (-) 1.1.1. Auth {* 1.1.1}
+---                    **** (-) 1.1.1.1. Login {* 1.1.1.1}
+---                    ***** (x) 1.1.1.1.1. Design
 ---
----   After extract: project.norg keeps the heading line only.
+---   After extract: status file keeps the heading line only.
 ---   New file "1.1.1. Auth.norg" gets the children (stars shifted by 3):
 ---                     * (-) 1.1.1.1. Login {* 1.1.1.1}
 ---                     ** (x) 1.1.1.1.1. Design

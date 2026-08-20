@@ -6,7 +6,7 @@
 ---   3. Shows confirmation if many renames are needed
 ---   4. Renames files/directories using temp suffix to avoid collisions
 ---   5. Updates all {* number} links across all project files
----   6. Regenerates all index.norg + project.norg files
+---   6. Regenerates all status files
 ---
 --- Collision avoidance uses a two-phase rename:
 ---   Phase 1: old_name → old_name.neorg_tmp

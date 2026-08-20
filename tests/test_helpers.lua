@@ -39,6 +39,59 @@ describe("helpers.get_todo_state", function()
         end
         vim.api.nvim_buf_delete(buf, { force = true })
     end)
+
+    it("normalizes uncertain to ambiguous", function()
+        local buf = vim.api.nvim_create_buf(false, true)
+        vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "* (?) Uncertain Heading" })
+        vim.bo[buf].filetype = "norg"
+        local root = helpers.get_norg_root(buf)
+        if root then
+            local heading = root:named_child(0)
+            if heading then
+                local state = helpers.get_todo_state(heading)
+                assert_eq(state, "ambiguous", "(?) normalized to ambiguous")
+            end
+        end
+        vim.api.nvim_buf_delete(buf, { force = true })
+    end)
+
+    it("normalizes urgent to important", function()
+        local buf = vim.api.nvim_create_buf(false, true)
+        vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "* (!) Urgent Heading" })
+        vim.bo[buf].filetype = "norg"
+        local root = helpers.get_norg_root(buf)
+        if root then
+            local heading = root:named_child(0)
+            if heading then
+                local state = helpers.get_todo_state(heading)
+                assert_eq(state, "important", "(!) normalized to important")
+            end
+        end
+        vim.api.nvim_buf_delete(buf, { force = true })
+    end)
+
+    it("returns standard names unchanged", function()
+        local cases = {
+            { "* ( ) Undone", "undone" },
+            { "* (-) Pending", "pending" },
+            { "* (=) On Hold", "on_hold" },
+            { "* (_) Cancelled", "cancelled" },
+        }
+        for _, case in ipairs(cases) do
+            local buf = vim.api.nvim_create_buf(false, true)
+            vim.api.nvim_buf_set_lines(buf, 0, -1, false, { case[1] })
+            vim.bo[buf].filetype = "norg"
+            local root = helpers.get_norg_root(buf)
+            if root then
+                local heading = root:named_child(0)
+                if heading then
+                    local state = helpers.get_todo_state(heading)
+                    assert_eq(state, case[2], case[1] .. " → " .. case[2])
+                end
+            end
+            vim.api.nvim_buf_delete(buf, { force = true })
+        end
+    end)
 end)
 
 describe("helpers.get_heading_level", function()

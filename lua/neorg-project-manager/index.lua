@@ -57,7 +57,7 @@ end
 --- @param root TSNode        The tree-sitter root node
 --- @param content string     The file content (source for get_node_text)
 --- @param prefix string|nil  The file's number prefix
---- @return table             { number_string → {line, level, state} }
+--- @return table             { number_string → {line, level, state, qualifiers} }
 local function collect_headings_from_tree(root, content, prefix)
     local headings_map = {}
     local counters = { 0, 0, 0, 0, 0, 0 }
@@ -90,10 +90,26 @@ local function collect_headings_from_tree(root, content, prefix)
                     num = numbering.format_number(counters, level, prefix)
                 end
 
-                -- Get todo state
-                local state = helpers.get_todo_state(node)
+                -- Get todo states (primary + qualifiers) — normalized by role, not position.
+                -- Qualifiers: ambiguous, important. Everything else is a primary state.
+                -- This handles reversed compound markers like (?|-) where the qualifier
+                -- appears first due to norg parser constraints.
+                local all_states = helpers.get_todo_states(node)
+                local state = nil
+                local qualifiers = {}
+                for _, s in ipairs(all_states) do
+                    if s == "ambiguous" or s == "important" then
+                        table.insert(qualifiers, s)
+                    elseif not state then
+                        state = s
+                    end
+                end
+                -- If only qualifiers were found, first becomes primary
+                if not state and #qualifiers > 0 then
+                    state = table.remove(qualifiers, 1)
+                end
 
-                headings_map[num] = { line = node:start(), level = level, state = state }
+                headings_map[num] = { line = node:start(), level = level, state = state, qualifiers = qualifiers }
 
                 for child in node:iter_children() do
                     collect(child)
@@ -116,7 +132,7 @@ end
 ---
 --- @param filepath string    Absolute path to the .norg file
 --- @param prefix string|nil  The file's number prefix (from filename)
---- @return table             { number_string → {line, level, state} }
+--- @return table             { number_string → {line, level, state, qualifiers} }
 function M.index_file(filepath, prefix)
     local root, content = read_and_parse(filepath)
     if not root then
@@ -200,7 +216,7 @@ end
 --- Uses a prefix lookup table for O(1) file resolution instead of linear scan.
 ---
 --- @param buf number  Buffer handle
---- @return table      Proxy: index[number] → {filepath, line, level, state} or nil
+--- @return table      Proxy: index[number] → {filepath, line, level, state, qualifiers} or nil
 function M.get(buf)
     local filepath = vim.api.nvim_buf_get_name(buf)
     local root = project.find_root(filepath)
@@ -229,9 +245,9 @@ function M.get(buf)
                     local file_headings = get_file_index(entry.filepath, entry.prefix)
                     local target = file_headings[number_key]
                     if target then
-                        return { filepath = entry.filepath, line = target.line, level = target.level, state = target.state }
+                        return { filepath = entry.filepath, line = target.line, level = target.level, state = target.state, qualifiers = target.qualifiers or {} }
                     end
-                    return { filepath = entry.filepath, line = 0, level = 0, state = nil }
+                    return { filepath = entry.filepath, line = 0, level = 0, state = nil, qualifiers = {} }
                 end
 
                 -- Fallback: search in status files for each directory
@@ -261,6 +277,7 @@ function M.get(buf)
                             line = target_in_status.line,
                             level = target_in_status.level,
                             state = target_in_status.state,
+                            qualifiers = target_in_status.qualifiers or {},
                         }
                     end
                 end
@@ -271,7 +288,7 @@ function M.get(buf)
             local file_headings = get_file_index(resolved.filepath, resolved.prefix)
             local target = file_headings[number_key]
             if target then
-                return { filepath = resolved.filepath, line = target.line, level = target.level, state = target.state }
+                return { filepath = resolved.filepath, line = target.line, level = target.level, state = target.state, qualifiers = target.qualifiers or {} }
             end
             return nil
         end,
@@ -289,20 +306,23 @@ end
 --- Get the top-level state of a file (state of its first heading).
 --- @param filepath string
 --- @param prefix string|nil
---- @return string|nil
+--- @return string|nil state
+--- @return string[] qualifiers
 function M.get_file_state(filepath, prefix)
     local headings = get_file_index(filepath, prefix)
     local first_state = nil
+    local first_qualifiers = {}
     local first_line = math.huge
 
     for _, info in pairs(headings) do
         if info.line < first_line then
             first_line = info.line
             first_state = info.state
+            first_qualifiers = info.qualifiers or {}
         end
     end
 
-    return first_state
+    return first_state, first_qualifiers
 end
 
 return M

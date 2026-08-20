@@ -51,8 +51,11 @@ lua/neorg-project-manager/
 ├── prereqs.lua     Prerequisite tracking virtual text
 ├── project.lua     Project root detection, file scanning
 ├── index.lua       Cross-file index with lazy loading
-├── status.lua      Status tree generation (project.norg / index.norg)
+├── status.lua      Status tree generation and surgical updates
 ├── rename.lua      Project-wide file/dir renaming
+├── picker.lua      Browse/filter project items by status
+├── bidir.lua       Bidirectional status propagation
+├── scaffold.lua    Project initialization (:NeorgPMInit)
 ├── health.lua      :checkhealth integration
 └── init.lua        Entry point, setup, commands, orchestration
 ```

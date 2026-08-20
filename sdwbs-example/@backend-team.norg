@@ -46,9 +46,10 @@
     - (x) Group admin permissions
 
 
-** (-) {* 42.4} Notifications
+** (=|-) {* 42.4} Notifications
    Effort: M (3-4 sprints)
    Status: Stage 1 backend complete, Stage 2 not started
+   /Partially blocked: legal review `(=|?)` blocks Stage 1 Validation./
 
 *** (x) {* 42.4.1} Stage 1 — Push Notifications (Backend)
     - (x) Push token registration and lifecycle management
@@ -71,7 +72,7 @@
    | Feature        | BE Status | Blocking? |
    | Auth           | (x) Done  | No        |
    | Chat Stage 2   | (x) Done  | No — FE/Mobile pending |
-   | Notifications  | (-) Stage 1 done, Stage 2 pending | Legal review blocks Validation |
+   | Notifications  | (=|-) Stage 1 done, Stage 2 pending | Legal review `(=|?)` blocks Validation |
    | Dashboard      | ( ) Not started | Waiting for SDK |
 
    Total backend tasks: 28 complete, 5 pending

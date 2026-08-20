@@ -1,6 +1,6 @@
 --- neorg-project-manager.fold: Fold-based toggle for status file tree headings.
 ---
---- Provides fold expression and toggle commands for project.norg / index.norg
+--- Provides fold expression and toggle commands for status files.
 --- buffers. Two fold operations:
 ---   - Toggle body (pt): hides all body/description text, headings stay visible
 ---   - Toggle all (pT): hides body AND child headings (full collapse to one line)
@@ -58,7 +58,7 @@ end
 --- FOLD SETUP
 ---------------------------------------------------------------------------
 
---- Set up fold options for a status file buffer (project.norg or index.norg).
+--- Set up fold options for a status file buffer.
 --- Configures foldmethod=expr with our custom foldexpr, starts fully expanded.
 ---
 --- @param buf number  Buffer handle
@@ -172,7 +172,7 @@ function M.toggle_body(buf)
 
     -- Check if folding is active
     if vim.wo.foldmethod ~= "expr" then
-        vim.notify("Folds not active in this buffer. Use on project.norg or index.norg.", vim.log.levels.WARN)
+        vim.notify("Folds not active in this buffer. Use on status files.", vim.log.levels.WARN)
         return
     end
 
@@ -259,7 +259,7 @@ function M.toggle_all(buf)
 
     -- Check if folding is active
     if vim.wo.foldmethod ~= "expr" then
-        vim.notify("Folds not active in this buffer. Use on project.norg or index.norg.", vim.log.levels.WARN)
+        vim.notify("Folds not active in this buffer. Use on status files.", vim.log.levels.WARN)
         return
     end
 

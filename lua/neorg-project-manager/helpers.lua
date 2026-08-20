@@ -15,8 +15,17 @@ local config = require("neorg-project-manager.config")
 --- TREE-SITTER NODE INSPECTION
 ---------------------------------------------------------------------------
 
+--- Normalize tree-sitter grammar todo state names to plugin-internal names.
+--- The norg grammar uses "urgent"/"uncertain" but the plugin (following Neorg
+--- core.qol.todo_items conventions) uses "important"/"ambiguous".
+local normalize_state = {
+    urgent = "important",
+    uncertain = "ambiguous",
+}
+
 --- Get the todo state from a node's detached_modifier_extension child.
 --- Looks for `todo_item_*` nodes within the extension and returns the state name.
+--- Grammar names are normalized to plugin names (urgent→important, uncertain→ambiguous).
 ---
 --- @param node TSNode  A heading or list item node
 --- @return string|nil  State name: "done", "undone", "pending", "on_hold", "cancelled",
@@ -27,12 +36,36 @@ function M.get_todo_state(node)
             for ext_child in child:iter_children() do
                 local ext_type = ext_child:type()
                 if ext_type:match("^todo_item_") then
-                    return ext_type:sub(#"todo_item_" + 1)
+                    local raw = ext_type:sub(#"todo_item_" + 1)
+                    return normalize_state[raw] or raw
                 end
             end
         end
     end
     return nil
+end
+
+--- Get ALL todo states from a node's detached_modifier_extension.
+--- Supports compound norg extensions like `(-|?)` which produce multiple
+--- `todo_item_*` children within a single `detached_modifier_extension` node.
+--- Grammar names are normalized to plugin names (urgent→important, uncertain→ambiguous).
+---
+--- @param node TSNode  A heading or list item node
+--- @return string[]    List of state names (first = primary, rest = qualifiers), empty if none
+function M.get_todo_states(node)
+    local states = {}
+    for child in node:iter_children() do
+        if child:type() == "detached_modifier_extension" then
+            for ext_child in child:iter_children() do
+                local ext_type = ext_child:type()
+                if ext_type:match("^todo_item_") then
+                    local raw = ext_type:sub(#"todo_item_" + 1)
+                    table.insert(states, normalize_state[raw] or raw)
+                end
+            end
+        end
+    end
+    return states
 end
 
 --- Get the heading level from a node type.

@@ -83,13 +83,14 @@
    - (x) {* 42.8.2} UI Component Library — design system tokens
 
 
-** (-) 42.4. [feature] Notifications {* 42.4}
+** (=|-) 42.4. [feature] Notifications {* 42.4}
 
    Owner: @backend-team
    Effort: M (3-4 sprints across 2 stages)
    Push notifications and scheduled email digests.
 
    /Detailed breakdown in companion file: `42.4. Notifications.norg`/
+   /Partially blocked by {* 42.11.5} Legal — Privacy Policy Review./
 
    Pre-requisites:
    - (x) {* 42.1} Authentication — user identity and push token registration
@@ -145,9 +146,10 @@
     /Cancelled — descoped after product review. Analytics alone provides
     sufficient value; gamification deferred indefinitely./
 
-*** (=) 42.5.3. Stage 3 — Custom Report Builder {* 42.5.3}
+*** (=|?) 42.5.3. Stage 3 — Custom Report Builder {* 42.5.3}
     /On hold — blocked by {* 42.8.1} API Client SDK completion. Will resume
-    when SDK covers all analytics endpoints./
+    when SDK covers all analytics endpoints. Uncertain whether the SDK will
+    support the query patterns this feature needs./
 
     User story:
     - /As a power user, I want to build custom reports by combining
@@ -249,7 +251,7 @@
     - (x) Infrastructure drift detection on schedule
 
 
-** (-) 42.8. [lib] Shared Libraries {* 42.8}
+** (?|-) 42.8. [lib] Shared Libraries {* 42.8}
 
 *** (-) 42.8.1. API Client SDK {* 42.8.1}
     Auto-generated TypeScript client from OpenAPI spec. Used by Frontend
@@ -348,12 +350,12 @@
     - (x) Firebase project: FCM server key provisioned
     - (x) Credentials stored in {* 42.6.7} Secrets Manager
 
-*** (=) 42.11.5. Legal — Privacy Policy Review {* 42.11.5}
+*** (=|?) 42.11.5. Legal — Privacy Policy Review {* 42.11.5}
     /On hold — legal team reviewing data handling for push notification
     tokens and chat message retention policy. Blocks Notifications Stage 1
-    Validation sign-off./
+    Validation sign-off. Timeline uncertain — legal has not provided an ETA./
     - (x) Data processing inventory submitted to legal
-    - (=) Legal review in progress (ETA unknown)
+    - (=|?) Legal review in progress (ETA unknown)
     - ( ) Updated privacy policy published
 
 *** ( ) 42.11.6. Third-party — OAuth Provider Approval {* 42.11.6}
