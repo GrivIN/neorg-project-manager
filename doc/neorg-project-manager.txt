@@ -65,8 +65,11 @@ Call setup explicitly if not using lazy.nvim's `opts`: >lua
 
                                         *:NeorgPMRenumber*
 :NeorgPMRenumber
-    Renumber all headings in the current file and update all `{* number}`
-    links to reflect new numbers. Prefix-aware: if the file has a number
+    Assign numbers to unnumbered headings in the current file using stable
+    numbering. Existing numbers are never changed — only headings without
+    valid numbers get assigned new ones. Gap-filling: if there's a free
+    counter between existing siblings, it's used; otherwise the next counter
+    after the maximum is assigned. Prefix-aware: if the file has a number
     in its filename, headings are numbered relative to that prefix.
 
                                         *:NeorgPMRenumberProject*
@@ -139,6 +142,19 @@ Call setup explicitly if not using lazy.nvim's `opts`: >lua
     root status file (e.g., `1. My Project.norg`). If a project
     already exists, opens its status file instead.
 
+                                        *:NeorgPMPromote*
+:NeorgPMPromote
+    Promote all direct (free) list items under the current heading
+    into child subsections (headings at level + 1). Cursor must be
+    inside a heading. Labeled sections (lines ending with `:` and
+    their list items) are preserved in place. Body text stays above
+    the new subsections. Nested sub-items become body content under
+    their new parent heading. New subsections are inserted after any
+    existing child headings. Auto-renumbers after promotion.
+
+    Refuses if the heading is at level 6 (max norg depth) — use
+    |:NeorgPMExtract| to split into a subfile first.
+
 ==============================================================================
 5. KEYBINDS                             *neorg-project-manager-keybinds*
 
@@ -152,6 +168,7 @@ All keybinds are buffer-local to norg files.
     <LocalLeader>pt     |:NeorgPMToggle| (body folds — headings only)
     <LocalLeader>pT     |:NeorgPMToggleAll| (full fold — collapse all)
     <LocalLeader>pe     |:NeorgPMExtract|
+    <LocalLeader>pm     |:NeorgPMPromote| (promote list items to subsections)
     <LocalLeader>pp     |:NeorgPMPick| (browse project items)
     <LocalLeader>pP     |:NeorgPMPickByState| (browse by status filter)
     <LocalLeader>po     |:NeorgPMPickByOwner| (browse by owner filter)
@@ -183,9 +200,6 @@ All options with defaults: >lua
         renumber_on_save = true,
         renumber_on_heading_leave = true,
 
-        -- Anchor root headings (preserve user-typed level-1 numbers)
-        anchor_root_headings = true,
-
         -- Numbering format (applied by total depth)
         numbering_styles = {
             "numeric", "numeric", "numeric",
@@ -201,7 +215,6 @@ All options with defaults: >lua
         -- Project settings
         project_root = nil,   -- nil = auto-detect via project.norg
         file_prefix = nil,    -- nil = auto-detect from filename
-        cross_file = true,
 
         -- Virtual text
         blocked_highlight = "DiagnosticWarn",
@@ -215,9 +228,23 @@ All options with defaults: >lua
             return string.format("[%d/%d]", done, total)
         end,
 
-        -- Keybinds
-        default_keybinds = true,
-        keybind_prefix = "p",
+        -- Outcome tracking
+        outcome_tracking = true,
+        outcome_pattern = "Outcomes?:",
+        outcome_highlight = "Comment",
+        outcome_format = function(done, total)
+            return string.format("[%d/%d outcomes]", done, total)
+        end,
+        outcome_incomplete_warning = true,
+        outcome_warning_highlight = "DiagnosticWarn",
+        outcome_warning_text = "[OUTCOMES INCOMPLETE]",
+
+        -- Metadata fields (Owner, Effort)
+        field_tracking = true,
+        owner_pattern = "Owner:",
+        effort_pattern = "Effort:",
+        field_display = "none",  -- "none" or "virtual"
+        field_highlight = "Comment",
 
         -- Rename
         rename_confirm_threshold = 5,
@@ -227,6 +254,10 @@ All options with defaults: >lua
         breadcrumb_separator = " > ",
         breadcrumb_project_path = true,     -- false for file-only context
         breadcrumb_format = nil,            -- custom function(segments) → string
+
+        -- Keybinds
+        default_keybinds = true,
+        keybind_prefix = "p",
     })
 <
 

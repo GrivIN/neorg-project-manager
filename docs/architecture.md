@@ -7,7 +7,7 @@ lua/neorg-project-manager/
 ├── init.lua        Entry point, setup, commands, orchestration
 ├── config.lua      Shared config storage (get/set)
 ├── helpers.lua     Tree-sitter utilities, link patterns, sorting, scandir
-├── numbering.lua   Number formatting, parsing, renumbering
+├── numbering.lua   Number formatting, parsing, stable renumbering
 ├── hop.lua         Link resolution (<CR> override)
 ├── sections.lua    Generic section detection engine (list + value fields)
 ├── prereqs.lua     Prerequisite tracking virtual text (uses sections.lua)
@@ -20,6 +20,7 @@ lua/neorg-project-manager/
 ├── rename.lua      Project-wide file/dir renaming
 ├── fold.lua        Fold expression + toggle for status files
 ├── extract.lua     Extract heading into its own .norg file
+├── promote.lua     Promote list items to subsections (:NeorgPMPromote)
 ├── breadcrumb.lua  Heading path display (statusline/winbar/virtual text)
 ├── picker.lua      Browse/filter project items by status/owner
 ├── bidir.lua       Bidirectional status propagation
@@ -63,6 +64,26 @@ File: "1.1.3.1. Stage 1.norg"  (prefix = 1.1.3.1)
 
 Numbers with `numbering_styles` are indexed by **total depth** (prefix depth +
 heading level), ensuring consistent formatting regardless of file nesting.
+
+### Stable numbering
+
+The `renumber(buf)` function uses a two-pass stable algorithm:
+
+1. **Pass 1 (collect):** Walks all headings, validates existing numbers
+   (correct depth + parent prefix match), builds per-parent sets of used
+   counter values, and detects duplicates.
+
+2. **Pass 2 (assign):** For each unnumbered/invalid heading, finds the
+   next free counter value after its predecessor sibling under the same
+   parent. Fills gaps when available (e.g., between 1.1 and 1.3 → assigns
+   1.2). Falls back to max+1 when no gap exists.
+
+**Guarantees:**
+- Existing valid numbers are never modified
+- Running renumber twice is idempotent
+- Gaps in numbering are allowed and preserved (a deleted heading's number
+  is never auto-reclaimed)
+- Cross-file `{* number}` links remain valid after renumber
 
 ### Depth limits
 

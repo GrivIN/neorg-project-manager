@@ -40,7 +40,7 @@
 
 ** (x) 42.1. [feature] Authentication {* 42.1}
 
-   Owner: @backend-team, @mobile-team
+   Owner: {* 42.12.1.1} Backend Team, {* 42.12.1.3} Mobile Team
    Effort: L (4-5 sprints across 2 stages)
    Signup, login, OAuth, and two-factor authentication across all platforms.
 
@@ -54,7 +54,7 @@
 
 ** (-) 42.2. [feature] Chat {* 42.2}
 
-   Owner: @backend-team, @frontend-team
+   Owner: {* 42.12.1.1} Backend Team, {* 42.12.1.2} Frontend Team
    Effort: XL (6-8 sprints across 2 stages)
    Real-time messaging — direct and group — with media attachments.
 
@@ -68,7 +68,7 @@
 
 ** (-) 42.3. [feature] Notes {* 42.3}
 
-   Owner: @fullstack-team
+   Owner: {* 42.12.1.4} Fullstack Team
    Effort: XL (8-10 sprints across 4 stages)
    Rich-text note creation, search, and sharing — progressing from
    wireframe prototype through functional implementation to pixel-perfect
@@ -85,7 +85,7 @@
 
 ** (-) 42.4. [feature] Notifications {* 42.4}
 
-   Owner: @backend-team
+   Owner: {* 42.12.1.1} Backend Team
    Effort: M (3-4 sprints across 2 stages)
    Push notifications and scheduled email digests.
 
@@ -99,7 +99,7 @@
 
 ** ( ) 42.5. [feature] Dashboard {* 42.5}
 
-   Owner: @frontend-team
+   Owner: {* 42.12.1.2} Frontend Team
    Effort: M (2-3 sprints)
    Analytics overview with charts and data export.
 
@@ -363,3 +363,73 @@
     - (x) Apple Sign-In capability registered
     - ( ) Google review approved (typically 2-4 weeks)
     - ( ) Apple review approved
+
+
+** 42.12. [team] Teams & Contributors {* 42.12}
+
+   Project team registry. Each team and individual contributor has a unique
+   numbered identifier, enabling cross-references from `Owner:` fields via
+   standard `{* number}` anchor links.
+
+*** 42.12.1. Teams {* 42.12.1}
+
+**** 42.12.1.1. Backend Team {* 42.12.1.1}
+     Focus: API services, data layer, infrastructure integration
+     Members:
+     - {* 42.12.2.1} Alice Chen (Tech Lead)
+     - {* 42.12.2.2} Bob Novak
+     - {* 42.12.2.4} Diana Park
+
+**** 42.12.1.2. Frontend Team {* 42.12.1.2}
+     Focus: Web UI, design system, browser-based interactions
+     Members:
+     - {* 42.12.2.3} Carlos Ruiz (Tech Lead)
+     - {* 42.12.2.5} Eva Mitchell
+
+**** 42.12.1.3. Mobile Team {* 42.12.1.3}
+     Focus: iOS and Android apps, device APIs, offline support
+     Members:
+     - {* 42.12.2.6} Farid Hassan (Tech Lead)
+     - {* 42.12.2.7} Grace Kim
+
+**** 42.12.1.4. Fullstack Team {* 42.12.1.4}
+     Focus: Cross-cutting features requiring both frontend and backend work
+     Members:
+     - {* 42.12.2.3} Carlos Ruiz
+     - {* 42.12.2.2} Bob Novak
+     - {* 42.12.2.5} Eva Mitchell
+     - {* 42.12.2.8} Hiro Tanaka
+
+*** 42.12.2. Contributors {* 42.12.2}
+
+**** 42.12.2.1. Alice Chen {* 42.12.2.1}
+     Role: Senior Backend Engineer, Tech Lead
+     Teams: {* 42.12.1.1} Backend Team
+
+**** 42.12.2.2. Bob Novak {* 42.12.2.2}
+     Role: Backend Engineer
+     Teams: {* 42.12.1.1} Backend Team, {* 42.12.1.4} Fullstack Team
+
+**** 42.12.2.3. Carlos Ruiz {* 42.12.2.3}
+     Role: Senior Frontend Engineer, Tech Lead
+     Teams: {* 42.12.1.2} Frontend Team, {* 42.12.1.4} Fullstack Team
+
+**** 42.12.2.4. Diana Park {* 42.12.2.4}
+     Role: Backend Engineer
+     Teams: {* 42.12.1.1} Backend Team
+
+**** 42.12.2.5. Eva Mitchell {* 42.12.2.5}
+     Role: Frontend Engineer
+     Teams: {* 42.12.1.2} Frontend Team, {* 42.12.1.4} Fullstack Team
+
+**** 42.12.2.6. Farid Hassan {* 42.12.2.6}
+     Role: Senior Mobile Engineer, Tech Lead
+     Teams: {* 42.12.1.3} Mobile Team
+
+**** 42.12.2.7. Grace Kim {* 42.12.2.7}
+     Role: Mobile Engineer
+     Teams: {* 42.12.1.3} Mobile Team
+
+**** 42.12.2.8. Hiro Tanaka {* 42.12.2.8}
+     Role: Fullstack Engineer
+     Teams: {* 42.12.1.4} Fullstack Team

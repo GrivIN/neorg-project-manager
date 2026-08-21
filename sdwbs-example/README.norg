@@ -93,6 +93,7 @@
    - `[ops]` — Operational concern (CI/CD, monitoring, alerting)
    - `[lib]` — Shared library or utility (consumed by features)
    - `[ext]` — External dependency (design handoffs, legal, third-party)
+   - `[team]` — Team and contributor registry (people, roles, membership)
 
    Tags are placed after the WBS number and before the element name:
    `** (-) 42.2. [feature] Chat {* 42.2}`
@@ -205,19 +206,54 @@
    via editor tooling (e.g. norg backlink navigation).
 
 
-** 1.10. Ownership
+** 1.10. Ownership & Team Registry
 
-   Each feature or module may include an `Owner:` field in its
-   description (e.g. `Owner: @backend-team`). This identifies the
-   responsible team but does not replace the ticket tracker for
-   individual assignment.
+   Each project has a `[team]` subsection that defines teams and individual
+   contributors as numbered WBS nodes. This enables `Owner:` fields to use
+   standard `{* number}` anchor links rather than plain-text names:
+
+   @code norg
+   ** (-) 42.2. [feature] Chat {* 42.2}
+      Owner: {* 42.12.1.1} Backend Team, {* 42.12.1.2} Frontend Team
+   @end
+
+   The team registry structure:
+
+   @code norg
+   ** 42.12. [team] Teams & Contributors {* 42.12}
+
+   *** 42.12.1. Teams {* 42.12.1}
+   **** 42.12.1.1. Backend Team {* 42.12.1.1}
+        Focus: API services, data layer
+        Members:
+        - {* 42.12.2.1} Alice Chen (Tech Lead)
+        - {* 42.12.2.2} Bob Novak
+
+   *** 42.12.2. Contributors {* 42.12.2}
+   **** 42.12.2.1. Alice Chen {* 42.12.2.1}
+        Role: Senior Backend Engineer, Tech Lead
+        Teams: {* 42.12.1.1} Backend Team
+   @end
+
+   Key principles:
+
+   - Each person has a *unique numbered ID* (e.g. `42.12.2.1`)
+   - Teams are *separate entities* that link to people via `{* N}` anchors
+   - People link back to their teams via `Teams:` field
+   - `Owner:` fields in feature headings link to teams or individual
+     contributors using the same `{* number}` anchor mechanism
+   - Cross-references are bidirectional — navigating from a team shows
+     all members; navigating from a person shows all their teams
+   - The team registry is a regular WBS subtree and participates in
+     numbering, search, and filtered views like any other section
 
    The SDWBS tracks *work scope*, not people. Sprint assignment,
    individual task ownership, and capacity planning live in the
-   ticket tracker.
+   ticket tracker. The team registry provides navigable context for
+   who is responsible at the module/feature level.
 
-   Per-owner filtered views (e.g. `@backend-team.norg`) can be
-   generated to show each team's slice of the WBS tree.
+   Per-owner filtered views (e.g. `@backend-team.norg`) can reference
+   the team's anchor and show that team's slice of the WBS tree.
 
 
 ** 1.11. Extra Fields
@@ -225,7 +261,9 @@
    Nodes may carry additional metadata fields as plain-text lines
    in their description:
 
-   - `Owner:` — responsible team or individual (e.g. `Owner: @backend-team`)
+   - `Owner:` — responsible team or individual, linked via anchors
+     (e.g. `Owner: {* 42.12.1.1} Backend Team`). See section 1.10 for the
+     team registry pattern.
    - `Effort:` — T-shirt size estimate (e.g. `Effort: M (2-3 sprints)`)
    - `Outcome:` — measurable success criteria, placed in the Validation
      phase (e.g. `Outcome: signup conversion >60%`)

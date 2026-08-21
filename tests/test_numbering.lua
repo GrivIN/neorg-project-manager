@@ -1,5 +1,5 @@
 --- Tests for the numbering module.
---- Covers: format_counter, format_number, parse_number_and_title, renumber, update_links
+--- Covers: format_counter, format_number, parse_number_and_title, renumber (stable), update_links
 
 local cfg = require("neorg-project-manager.config")
 local numbering = require("neorg-project-manager.numbering")
@@ -151,7 +151,7 @@ describe("numbering.renumber", function()
         vim.api.nvim_buf_delete(buf, { force = true })
     end)
 
-    it("updates links when numbers shift", function()
+    it("preserves existing numbers (stable numbering)", function()
         cfg.set({
             numbering_styles = { "numeric", "numeric", "numeric", "numeric", "numeric", "numeric" },
             number_separator = ".",
@@ -172,9 +172,151 @@ describe("numbering.renumber", function()
         numbering.renumber(buf)
 
         local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
-        assert_eq(lines[2], "** 1.1. Beta", "beta renumbered to 1.1")
-        assert_eq(lines[3], "** 1.2. Gamma", "gamma renumbered to 1.2")
-        assert_match(lines[4], "{%* 1.1}", "link updated to 1.1")
+        -- Stable numbering: existing valid numbers are never changed
+        assert_eq(lines[2], "** 1.2. Beta", "beta keeps 1.2")
+        assert_eq(lines[3], "** 1.1. Gamma", "gamma keeps 1.1")
+        assert_match(lines[4], "{%* 1.2}", "link unchanged")
+        vim.api.nvim_buf_delete(buf, { force = true })
+    end)
+
+    it("fills gaps between existing numbers", function()
+        cfg.set({
+            numbering_styles = { "numeric", "numeric", "numeric", "numeric", "numeric", "numeric" },
+            number_separator = ".",
+            number_title_separator = ". ",
+            number_format = nil,
+            file_prefix = nil,
+        })
+        local buf = vim.api.nvim_create_buf(false, true)
+        vim.api.nvim_buf_set_lines(buf, 0, -1, false, {
+            "* 1. Project",
+            "** 1.1. First",
+            "** New Task",
+            "** 1.3. Third",
+        })
+        vim.bo[buf].filetype = "norg"
+        vim.treesitter.get_parser(buf, "norg"):parse()
+
+        numbering.renumber(buf)
+
+        local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+        assert_eq(lines[1], "* 1. Project", "parent unchanged")
+        assert_eq(lines[2], "** 1.1. First", "first unchanged")
+        assert_eq(lines[3], "** 1.2. New Task", "new task fills gap at 1.2")
+        assert_eq(lines[4], "** 1.3. Third", "third unchanged")
+        vim.api.nvim_buf_delete(buf, { force = true })
+    end)
+
+    it("assigns after max when no gap available", function()
+        cfg.set({
+            numbering_styles = { "numeric", "numeric", "numeric", "numeric", "numeric", "numeric" },
+            number_separator = ".",
+            number_title_separator = ". ",
+            number_format = nil,
+            file_prefix = nil,
+        })
+        local buf = vim.api.nvim_create_buf(false, true)
+        vim.api.nvim_buf_set_lines(buf, 0, -1, false, {
+            "* 1. Project",
+            "** 1.1. First",
+            "** New Task",
+            "** 1.2. Second",
+        })
+        vim.bo[buf].filetype = "norg"
+        vim.treesitter.get_parser(buf, "norg"):parse()
+
+        numbering.renumber(buf)
+
+        local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+        assert_eq(lines[2], "** 1.1. First", "first unchanged")
+        assert_eq(lines[3], "** 1.3. New Task", "new task gets 1.3 (after max since 1.2 taken)")
+        assert_eq(lines[4], "** 1.2. Second", "second unchanged")
+        vim.api.nvim_buf_delete(buf, { force = true })
+    end)
+
+    it("handles multiple unnumbered headings sequentially", function()
+        cfg.set({
+            numbering_styles = { "numeric", "numeric", "numeric", "numeric", "numeric", "numeric" },
+            number_separator = ".",
+            number_title_separator = ". ",
+            number_format = nil,
+            file_prefix = nil,
+        })
+        local buf = vim.api.nvim_create_buf(false, true)
+        vim.api.nvim_buf_set_lines(buf, 0, -1, false, {
+            "* 1. Project",
+            "** 1.1. First",
+            "** New A",
+            "** New B",
+            "** 1.5. Fifth",
+        })
+        vim.bo[buf].filetype = "norg"
+        vim.treesitter.get_parser(buf, "norg"):parse()
+
+        numbering.renumber(buf)
+
+        local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+        assert_eq(lines[2], "** 1.1. First", "first unchanged")
+        assert_eq(lines[3], "** 1.2. New A", "new A gets 1.2")
+        assert_eq(lines[4], "** 1.3. New B", "new B gets 1.3")
+        assert_eq(lines[5], "** 1.5. Fifth", "fifth unchanged")
+        vim.api.nvim_buf_delete(buf, { force = true })
+    end)
+
+    it("preserves anchored level-1 headings in prefix-less files", function()
+        cfg.set({
+            numbering_styles = { "numeric", "numeric", "numeric", "numeric", "numeric", "numeric" },
+            number_separator = ".",
+            number_title_separator = ". ",
+            number_format = nil,
+            file_prefix = nil,
+        })
+        local buf = vim.api.nvim_create_buf(false, true)
+        vim.api.nvim_buf_set_lines(buf, 0, -1, false, {
+            "* 42. Project Alpha",
+            "** Child One",
+            "** Child Two",
+        })
+        vim.bo[buf].filetype = "norg"
+        vim.treesitter.get_parser(buf, "norg"):parse()
+
+        numbering.renumber(buf)
+
+        local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+        assert_eq(lines[1], "* 42. Project Alpha", "anchor preserved")
+        assert_eq(lines[2], "** 42.1. Child One", "child 1 under anchor")
+        assert_eq(lines[3], "** 42.2. Child Two", "child 2 under anchor")
+        vim.api.nvim_buf_delete(buf, { force = true })
+    end)
+
+    it("is idempotent (running twice produces same result)", function()
+        cfg.set({
+            numbering_styles = { "numeric", "numeric", "numeric", "numeric", "numeric", "numeric" },
+            number_separator = ".",
+            number_title_separator = ". ",
+            number_format = nil,
+            file_prefix = nil,
+        })
+        local buf = vim.api.nvim_create_buf(false, true)
+        vim.api.nvim_buf_set_lines(buf, 0, -1, false, {
+            "* 1. Project",
+            "** 1.1. Alpha",
+            "** 1.3. Gamma",
+            "*** 1.3.1. Deep",
+        })
+        vim.bo[buf].filetype = "norg"
+        vim.treesitter.get_parser(buf, "norg"):parse()
+
+        numbering.renumber(buf)
+        local after_first = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+
+        vim.treesitter.get_parser(buf, "norg"):parse()
+        numbering.renumber(buf)
+        local after_second = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+
+        for i = 1, #after_first do
+            assert_eq(after_second[i], after_first[i], "idempotent line " .. i)
+        end
         vim.api.nvim_buf_delete(buf, { force = true })
     end)
 end)

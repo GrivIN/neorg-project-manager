@@ -27,7 +27,7 @@
 
 
 ** (-) {* 42.2} Chat
-   Effort: XL (6-8 sprints) — shared with @frontend-team
+   Effort: XL (6-8 sprints) — shared with {* 42.12.1.2} Frontend Team
    Status: Stage 1 complete, Stage 2 backend complete
 
 *** (x) {* 42.2.1} Stage 1 — Direct Messaging (Backend)

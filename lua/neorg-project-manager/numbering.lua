@@ -396,8 +396,113 @@ function M.build_number_index(buf)
 end
 
 ---------------------------------------------------------------------------
---- RENUMBERING
+--- RENUMBERING (STABLE)
 ---------------------------------------------------------------------------
+
+--- Split a number string into its component parts using the configured separator.
+--- For example, "42.1.3" → {"42", "1", "3"}.
+---
+--- @param num string           The full number string
+--- @return string[]            Array of component strings
+local function split_number_parts(num)
+    local sep = config.get("number_separator", ".")
+    local parts = {}
+    local start = 1
+    while true do
+        local pos = num:find(sep, start, true)
+        if not pos then
+            table.insert(parts, num:sub(start))
+            break
+        end
+        table.insert(parts, num:sub(start, pos - 1))
+        start = pos + #sep
+    end
+    return parts
+end
+
+--- Extract the parent prefix from a full number string.
+--- For "42.1.3" → "42.1", for "1" → "".
+---
+--- @param num string           The full number string
+--- @return string              Parent prefix (empty string if top-level)
+local function get_number_parent(num)
+    local sep = config.get("number_separator", ".")
+    local last_sep = nil
+    local start = 1
+    while true do
+        local pos = num:find(sep, start, true)
+        if not pos then break end
+        last_sep = pos
+        start = pos + #sep
+    end
+    if last_sep then
+        return num:sub(1, last_sep - 1)
+    end
+    return ""
+end
+
+--- Extract the last counter component from a number string.
+--- For "42.1.3" → "3", for "1" → "1".
+---
+--- @param num string           The full number string
+--- @return string              The last counter component
+local function get_number_last(num)
+    local sep = config.get("number_separator", ".")
+    local last_start = 1
+    local start = 1
+    while true do
+        local pos = num:find(sep, start, true)
+        if not pos then break end
+        last_start = pos + #sep
+        start = pos + #sep
+    end
+    return num:sub(last_start)
+end
+
+--- Validate whether a heading's number is structurally correct.
+--- A number is valid if:
+---   1. Its depth equals the expected depth (prefix_depth + heading_level)
+---   2. Its parent prefix matches the expected parent's number
+---
+--- @param num string               The heading's parsed number
+--- @param expected_parent string   The expected parent prefix (number of the parent heading, or file prefix)
+--- @param level number             The heading's level (1-6)
+--- @param file_prefix_depth number The depth of the file prefix
+--- @return boolean                 True if the number is structurally valid
+local function validate_number(num, expected_parent, level, file_prefix_depth)
+    if not num then
+        return false
+    end
+
+    -- Check depth: should be file_prefix_depth + level
+    local num_depth = helpers.prefix_depth(num)
+    local expected_depth = file_prefix_depth + level
+    if num_depth ~= expected_depth then
+        return false
+    end
+
+    -- Check parent prefix matches
+    local num_parent = get_number_parent(num)
+    if num_parent ~= (expected_parent or "") then
+        return false
+    end
+
+    return true
+end
+
+--- Find the next free counter value under a parent, starting after a given value.
+--- Scans upward from `after + 1` until a value not in `used_set` is found.
+---
+--- @param used_set table<number, boolean>  Set of counter values already taken
+--- @param after number                     Start searching after this value (0 = from the beginning)
+--- @return number                          The first free counter value
+local function find_free_counter(used_set, after)
+    local candidate = after + 1
+    while used_set[candidate] do
+        candidate = candidate + 1
+    end
+    return candidate
+end
 
 --- Compute the updated title for a heading given its correct number.
 --- Returns nil if no change is needed.
@@ -417,8 +522,14 @@ local function compute_heading_update(title_text, correct_number, title_sep)
     return new_title, existing_num
 end
 
---- Renumber all headings in the buffer and update links.
---- Prefix-aware: uses total-depth styles for consistent formatting.
+--- Renumber all headings in the buffer using stable numbering.
+---
+--- Stable numbering preserves existing valid numbers and only assigns new
+--- numbers to unnumbered headings. Numbers are never changed, preventing
+--- breakage of cross-file `{* number}` links.
+---
+--- New headings are assigned numbers that fill gaps between existing siblings.
+--- If no gap is available, the next counter after the maximum is used.
 ---
 --- @param buf number  Buffer handle
 function M.renumber(buf)
@@ -431,96 +542,205 @@ function M.renumber(buf)
         return
     end
 
-    local counters = { 0, 0, 0, 0, 0, 0 }
     local title_sep = config.get("number_title_separator", ". ")
+    local separator = config.get("number_separator", ".")
     local prefix = M.get_file_prefix(buf)
+    local file_prefix_depth = helpers.prefix_depth(prefix)
 
-    -- Anchoring: in prefix-less files, level-1 headings with existing numbers
-    -- are treated as anchors (their number is preserved, children follow).
-    local anchor_roots = config.get("anchor_root_headings", true)
-    local can_anchor = anchor_roots and (not prefix or prefix == "")
+    ---------------------------------------------------------------------------
+    -- Pass 1: Collect existing numbers, validate, build used-counter sets
+    ---------------------------------------------------------------------------
 
-    local old_to_new = {}
-    local changes = {}
+    --- @class HeadingInfo
+    --- @field heading table          Original heading data from get_headings()
+    --- @field title_text string      Raw paragraph_segment text
+    --- @field existing_num string|nil Parsed number (nil if unnumbered)
+    --- @field bare_title string      Title without number
+    --- @field leading_ws string      Leading whitespace
+    --- @field level number           Heading level (1-6)
+    --- @field valid boolean          Whether existing number is structurally valid
+    --- @field parent_prefix string   The expected parent prefix for this heading
+    --- @field local_counter number|nil The local counter value (integer) if valid
+
+    local heading_info = {}
+    -- parent_num[L] tracks the full number of the most recent heading at level L
+    local parent_num = {}
+    -- used_counters[parent_prefix] = set of integer counter values taken under that parent
+    local used_counters = {}
+    -- Track duplicates: seen_numbers[full_number] = first line number (0-indexed)
+    local seen_numbers = {}
 
     for _, h in ipairs(headings) do
-        local anchored = false
         local title_text = vim.treesitter.get_node_text(h.title_node, buf)
+        local existing_num, bare_title, leading_ws = M.parse_number_and_title(title_text)
 
-        -- Skip file-title heading: if this is a level-1 heading whose existing
-        -- number matches the file prefix, it's a document title (e.g., the root
-        -- heading of an extracted file). Don't renumber it, don't consume a counter.
-        if prefix and prefix ~= "" and h.level == 1 then
-            local existing_num, _, _ = M.parse_number_and_title(title_text)
-            if existing_num == prefix then
-                goto next_heading
+        -- Skip file-title heading: level-1 heading whose number equals file prefix
+        if prefix and prefix ~= "" and h.level == 1 and existing_num == prefix then
+            -- Still update parent tracking (this heading IS the file-level parent)
+            parent_num[1] = existing_num
+            for i = 2, 6 do parent_num[i] = nil end
+            goto continue_pass1
+        end
+
+        -- Determine expected parent prefix
+        local expected_parent
+        if h.level == 1 then
+            expected_parent = prefix or ""
+        else
+            expected_parent = parent_num[h.level - 1] or prefix or ""
+        end
+
+        -- Validate existing number
+        local valid = validate_number(existing_num, expected_parent, h.level, file_prefix_depth)
+        local local_counter = nil
+
+        if valid then
+            -- Extract the integer counter value from the last component
+            local last_str = get_number_last(existing_num)
+            local styles = config.get("numbering_styles",
+                { "numeric", "numeric", "numeric", "numeric", "numeric", "numeric" })
+            local total_depth = file_prefix_depth + h.level
+            local style = styles[total_depth] or styles[#styles] or "numeric"
+            local_counter = M.reverse_counter(last_str, style)
+
+            if not local_counter or local_counter <= 0 or local_counter ~= math.floor(local_counter) then
+                -- Failed to parse counter — treat as invalid
+                valid = false
+                local_counter = nil
             end
         end
 
-        -- Try to anchor level-1 headings in prefix-less files
-        if can_anchor and h.level == 1 then
-            local existing_num, _, _ = M.parse_number_and_title(title_text)
-            if existing_num then
-                -- Only anchor single-part numbers (reject "42.1" which belongs in a prefixed file)
-                local separator = config.get("number_separator", ".")
-                if not existing_num:find(separator, 1, true) then
-                    local styles = config.get("numbering_styles",
-                        { "numeric", "numeric", "numeric", "numeric", "numeric", "numeric" })
-                    local style = styles[1] or "numeric"
-                    local counter_val = M.reverse_counter(existing_num, style)
-                    -- Must be a positive integer (reject floats, negatives, zero)
-                    if counter_val and counter_val > 0 and counter_val == math.floor(counter_val) then
-                        counters[1] = counter_val
-                        for i = 2, 6 do
-                            counters[i] = 0
-                        end
-                        anchored = true
-                    end
-                end
+        -- Record info
+        local info = {
+            heading = h,
+            title_text = title_text,
+            existing_num = existing_num,
+            bare_title = bare_title,
+            leading_ws = leading_ws,
+            level = h.level,
+            valid = valid,
+            parent_prefix = expected_parent,
+            local_counter = local_counter,
+        }
+        table.insert(heading_info, info)
+
+        -- Update parent tracking and used counters
+        if valid then
+            parent_num[h.level] = existing_num
+            for i = h.level + 1, 6 do parent_num[i] = nil end
+
+            -- Record counter as used under this parent
+            if not used_counters[expected_parent] then
+                used_counters[expected_parent] = {}
             end
-        end
+            used_counters[expected_parent][local_counter] = true
 
-        if not anchored then
-            -- Normal increment
-            counters[h.level] = counters[h.level] + 1
-            for i = h.level + 1, 6 do
-                counters[i] = 0
+            -- Duplicate detection
+            if seen_numbers[existing_num] then
+                vim.notify(
+                    string.format("Duplicate number '%s' detected (lines %d and %d). Please resolve manually.",
+                        existing_num, seen_numbers[existing_num] + 1, h.line + 1),
+                    vim.log.levels.WARN)
+            else
+                seen_numbers[existing_num] = h.line
             end
+        else
+            -- Invalid/unnumbered heading: don't update parent_num yet
+            -- But we must still clear deeper levels to avoid stale parents
+            for i = h.level + 1, 6 do parent_num[i] = nil end
         end
 
-        local correct_number = M.format_number(counters, h.level, prefix)
-        local new_title, old_number = compute_heading_update(title_text, correct_number, title_sep)
-
-        if old_number and old_number ~= correct_number then
-            old_to_new[old_number] = correct_number
-        end
-
-        if new_title then
-            local _, _, title_end_row, title_end_col = h.title_node:range()
-            table.insert(changes, {
-                line = h.line,
-                col = h.title_col,
-                end_line = title_end_row,
-                end_col = title_end_col,
-                new_title = new_title,
-            })
-        end
-
-        ::next_heading::
+        ::continue_pass1::
     end
 
-    if #changes == 0 and vim.tbl_isempty(old_to_new) then
+    ---------------------------------------------------------------------------
+    -- Pass 2: Assign numbers to unnumbered/invalid headings, compute changes
+    ---------------------------------------------------------------------------
+
+    -- Reset parent tracking for second pass
+    parent_num = {}
+    -- Track predecessor counter per parent (for gap-filling)
+    -- predecessor[parent_prefix] = last counter value seen/assigned under this parent
+    local predecessor = {}
+
+    local changes = {}
+
+    for _, info in ipairs(heading_info) do
+        -- Update parent tracking based on what we know
+        if info.valid then
+            parent_num[info.level] = info.existing_num
+            for i = info.level + 1, 6 do parent_num[i] = nil end
+            -- Update predecessor for this parent
+            predecessor[info.parent_prefix] = info.local_counter
+        else
+            -- Need to assign a number
+            local expected_parent
+            if info.level == 1 then
+                expected_parent = prefix or ""
+            else
+                expected_parent = parent_num[info.level - 1] or prefix or ""
+            end
+
+            -- Ensure used_counters set exists for this parent
+            if not used_counters[expected_parent] then
+                used_counters[expected_parent] = {}
+            end
+
+            -- Find predecessor counter (last assigned/seen counter under this parent)
+            local pred = predecessor[expected_parent] or 0
+
+            -- Find next free counter after predecessor
+            local counter = find_free_counter(used_counters[expected_parent], pred)
+
+            -- Mark as used
+            used_counters[expected_parent][counter] = true
+            predecessor[expected_parent] = counter
+
+            -- Format the full number
+            local styles = config.get("numbering_styles",
+                { "numeric", "numeric", "numeric", "numeric", "numeric", "numeric" })
+            local total_depth = file_prefix_depth + info.level
+            local style = styles[total_depth] or styles[#styles] or "numeric"
+            local formatted_counter = M.format_counter(counter, style)
+
+            local full_number
+            if expected_parent ~= "" then
+                full_number = expected_parent .. separator .. formatted_counter
+            else
+                full_number = formatted_counter
+            end
+
+            -- Update parent tracking (this heading now has a number)
+            parent_num[info.level] = full_number
+            for i = info.level + 1, 6 do parent_num[i] = nil end
+
+            -- Compute the buffer change
+            local new_title = info.leading_ws .. full_number .. title_sep .. info.bare_title
+            if new_title ~= info.title_text then
+                local h = info.heading
+                local _, _, title_end_row, title_end_col = h.title_node:range()
+                table.insert(changes, {
+                    line = h.line,
+                    col = h.title_col,
+                    end_line = title_end_row,
+                    end_col = title_end_col,
+                    new_title = new_title,
+                })
+            end
+        end
+    end
+
+    ---------------------------------------------------------------------------
+    -- Apply changes to buffer (reverse order to preserve positions)
+    ---------------------------------------------------------------------------
+
+    if #changes == 0 then
         return
     end
 
-    -- Apply in reverse order to preserve positions
     for i = #changes, 1, -1 do
         local c = changes[i]
         vim.api.nvim_buf_set_text(buf, c.line, c.col, c.end_line, c.end_col, { c.new_title })
-    end
-
-    if not vim.tbl_isempty(old_to_new) then
-        M.update_links(buf, old_to_new)
     end
 end
 

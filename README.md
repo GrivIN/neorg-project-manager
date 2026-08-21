@@ -503,7 +503,7 @@ Add todo states and they propagate normally:
 ### Custom root numbering
 
 If your company assigns unique project numbers, type the root heading with
-that number. The plugin preserves it as an anchor — all children follow:
+that number. The plugin preserves it — all children follow:
 
 ```norg
 * 42. Project Alpha
@@ -525,10 +525,10 @@ After `:NeorgPMRenumber` (`<LocalLeader>pr`):
 ** 43.1. Feature X
 ```
 
-`42` is preserved (user-typed anchor). `Project Beta` had no number, so it
-gets `43` (next consecutive). All children inherit from their parent.
+`42` is preserved (existing number). `Project Beta` had no number, so it
+gets `43` (next free after 42). All children inherit from their parent.
 
-You can have multiple anchored projects in one file with gaps:
+You can have multiple projects in one file with gaps:
 
 ```norg
 * 42. Project Alpha
@@ -539,13 +539,13 @@ You can have multiple anchored projects in one file with gaps:
 ** 101.1. Feature
 ```
 
-Each anchor resets the counter. Un-numbered headings always get `previous + 1`.
+Existing numbers are never changed. Un-numbered headings get the next
+available counter after their predecessor sibling.
 
-This only applies to level-1 headings in files without a prefix (standalone
-files, `project.norg`). Files with a prefix (e.g., `1.1.3.1. Stage 1.norg`)
-always number their headings relative to the file prefix — no anchoring.
-
-Disable with `anchor_root_headings = false` to get pure positional numbering.
+**Stable numbering:** The renumber function never changes existing numbers.
+This means `{* number}` links remain valid across files and sections.
+Only unnumbered headings receive new numbers, filling gaps between existing
+siblings when possible.
 
 ### Multi-file project
 
@@ -641,15 +641,17 @@ auto-update). Everything else is yours — never touched.
 | Key | Action |
 |-----|--------|
 | `<CR>` | Follow `{* number}` link (cross-file), falls back to Neorg hop |
-| `<LocalLeader>pr` | Renumber headings in current file |
+| `<LocalLeader>pr` | Renumber headings in current file (stable — never changes existing) |
 | `<LocalLeader>pR` | Renumber entire project (files + dirs + links) |
 | `<LocalLeader>ps` | Update status in current status file |
 | `<LocalLeader>pS` | Update all status files across the project |
 | `<LocalLeader>pt` | Toggle body folds — hide descriptions, keep all headings visible |
 | `<LocalLeader>pT` | Toggle full fold — collapse heading with all children |
 | `<LocalLeader>pe` | Extract heading content into its own file |
+| `<LocalLeader>pm` | Promote list items to subsections |
 | `<LocalLeader>pp` | Browse project items (picker) |
 | `<LocalLeader>pP` | Browse items by status filter |
+| `<LocalLeader>po` | Browse items by owner filter |
 | `<LocalLeader>pi` | Initialize new project |
 
 Disable defaults with `default_keybinds = false`. Change the prefix
@@ -723,6 +725,14 @@ Run `:checkhealth neorg-project-manager` to verify setup.
 - [ ] Windows compatibility testing and CI
 - [ ] Semantic version tags / release workflow
 - [ ] LuaLS type annotations (`.luarc.json` + `@class` annotations on config)
+- [ ] Teams and owners as project subsections — teams and individual
+      contributors (owners) should be a subsection under the project; each
+      person gets their own unique id; teams are separate entities that link
+      to people; owners link to teams or contributors using the existing
+      `{* anchor}` linking mechanism
+- [x] Stable numbering — the renumber function never changes existing
+      numbers; only assigns numbers to new/unnumbered headings, filling
+      gaps between existing siblings when possible
 
 Contributions welcome — see [CONTRIBUTING.md](CONTRIBUTING.md).
 

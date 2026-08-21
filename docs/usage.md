@@ -182,6 +182,87 @@ Browse project items with status filtering:
 Uses `vim.ui.select` — automatically works with telescope (via dressing.nvim),
 fzf-lua, or any other UI override.
 
+## Promote list items to subsections
+
+When a heading has outgrown its flat list of tasks and you want to convert
+them into proper subsections (child headings), use `:NeorgPMPromote`
+(`<LocalLeader>pm`).
+
+**Before:**
+
+```norg
+** (-) 42.4. Notifications
+   High priority feature for Q2.
+   Pre-requisites:
+   - (x) Backend notification service
+
+   - (-) Rich notification content (image preview, action buttons)
+     - Image preview support
+     - Action buttons
+   - ( ) Push notification scheduling
+   - (x) Basic notification display
+*** (-) 42.4.1. Existing child section
+```
+
+**After running `:NeorgPMPromote`:**
+
+```norg
+** (-) 42.4. Notifications
+   High priority feature for Q2.
+   Pre-requisites:
+   - (x) Backend notification service
+*** (-) 42.4.1. Existing child section
+*** (-) 42.4.2. Rich notification content (image preview, action buttons)
+   - Image preview support
+   - Action buttons
+*** ( ) 42.4.3. Push notification scheduling
+*** (x) 42.4.4. Basic notification display
+```
+
+**Behavior:**
+
+- Body text (paragraphs) stays above the subsections
+- Labeled sections (lines ending with `:` and their list items, like
+  `Pre-requisites:`) are preserved in place — a blank line separates
+  labeled items from free items
+- Nested sub-items (deeper-indented list items) become body content
+  under their new parent heading
+- New subsections are inserted after existing child headings
+- Numbers are auto-assigned via stable numbering (fills available gaps)
+- If the heading is already at level 6 (max depth), the command refuses
+  with a suggestion to split to a subfile first
+
+**Usage:**
+1. Place cursor anywhere inside the heading whose list items you want to promote
+2. Run `:NeorgPMPromote` or press `<LocalLeader>pm`
+
+## Stable numbering
+
+The renumber function uses **stable numbering**: existing numbers are never
+changed. Only unnumbered headings get assigned new numbers. This prevents
+breakage of `{* number}` links in other parts of the document or across files.
+
+**Key behaviors:**
+
+- Existing valid numbers are preserved exactly as-is, even if they are out
+  of document order
+- New headings are assigned the first available gap after their predecessor
+  sibling (e.g., between `1.1` and `1.3` → new heading gets `1.2`)
+- If no gap exists (e.g., between `1.1` and `1.2`), the new heading gets
+  the next counter after the maximum (e.g., `1.3`)
+- Duplicate numbers are detected and a warning is shown (both are preserved;
+  you must resolve manually)
+- Running renumber twice is idempotent — no changes on the second run
+
+**Number validation:**
+
+A heading's number is considered "valid" if:
+1. It has the correct depth for its level (file prefix depth + heading level)
+2. Its parent prefix matches the actual parent heading's number
+
+Numbers that fail validation (wrong depth, wrong parent) are treated as
+unnumbered and reassigned.
+
 ## Project initialization
 
 `:NeorgPMInit` (`<LocalLeader>pi`) creates a new project in the current
@@ -240,13 +321,14 @@ opts = { field_display = "virtual" }  -- "none" (default) or "virtual"
 
 | Command | Keybind | Description |
 |---------|---------|-------------|
-| `:NeorgPMRenumber` | `<LocalLeader>pr` | Renumber headings + update links in the current file |
+| `:NeorgPMRenumber` | `<LocalLeader>pr` | Assign numbers to unnumbered headings (stable — never changes existing numbers) |
 | `:NeorgPMRenumberProject` | `<LocalLeader>pR` | Renumber all project files/dirs + all links |
 | `:NeorgPMStatus` | `<LocalLeader>ps` | Update status in current status file |
 | `:NeorgPMStatusAll` | `<LocalLeader>pS` | Regenerate ALL status files across the project |
 | `:NeorgPMToggle` | `<LocalLeader>pt` | Toggle body folds (hide descriptions, keep headings visible) |
 | `:NeorgPMToggleAll` | `<LocalLeader>pT` | Toggle full fold (collapse heading with all children) |
 | `:NeorgPMExtract` | `<LocalLeader>pe` | Extract heading content into its own file |
+| `:NeorgPMPromote` | `<LocalLeader>pm` | Promote list items under current heading to subsections |
 | `:NeorgPMPick` | `<LocalLeader>pp` | Browse project items (optional state filter argument) |
 | `:NeorgPMPickByState` | `<LocalLeader>pP` | Browse items filtered by a chosen status |
 | `:NeorgPMPickByOwner` | `<LocalLeader>po` | Browse items filtered by owner |
@@ -280,9 +362,6 @@ require("neorg-project-manager").setup({
     renumber_on_save = true,
     renumber_on_heading_leave = true,
 
-    -- Anchor root headings
-    anchor_root_headings = true,
-
     -- Numbering format
     numbering_styles = { "numeric", "numeric", "numeric", "numeric", "numeric", "numeric" },
     number_separator = ".",
@@ -312,6 +391,24 @@ require("neorg-project-manager").setup({
 
     -- Rename settings
     rename_confirm_threshold = 5,
+
+    -- Outcome tracking
+    outcome_tracking = true,
+    outcome_pattern = "Outcomes?:",
+    outcome_highlight = "Comment",
+    outcome_format = function(done, total)
+        return string.format("[%d/%d outcomes]", done, total)
+    end,
+    outcome_incomplete_warning = true,
+    outcome_warning_highlight = "DiagnosticWarn",
+    outcome_warning_text = "[OUTCOMES INCOMPLETE]",
+
+    -- Metadata fields (Owner, Effort)
+    field_tracking = true,
+    owner_pattern = "Owner:",
+    effort_pattern = "Effort:",
+    field_display = "none",  -- "none" or "virtual"
+    field_highlight = "Comment",
 
     -- Breadcrumb
     breadcrumb_display = "statusline",  -- "statusline", "winbar", "virtual", "none"
@@ -363,7 +460,8 @@ number_title_separator = ": "
 
 ## Tips
 
-- Run `:NeorgPMRenumber` (`<LocalLeader>pr`) after adding or reordering headings
+- Run `:NeorgPMRenumber` (`<LocalLeader>pr`) after adding new headings — it
+  assigns numbers to unnumbered headings without changing existing ones
 - Use `{* number}` links in prerequisites to track cross-file dependencies
 - Keep status files open as dashboards — states update when you save content files
 - The plugin works fine with a single file (no project structure needed)
@@ -371,3 +469,7 @@ number_title_separator = ": "
 - Remove the `{* N}` link from a heading to "unmanage" it permanently
 - Use `:NeorgPMPick` (`<LocalLeader>pp`) to browse items by status
 - Use `:NeorgPMInit` (`<LocalLeader>pi`) to create a new project
+- Use `:NeorgPMPromote` (`<LocalLeader>pm`) to convert flat task lists into
+  proper subsections when a heading grows complex
+- Numbers are stable — you can safely reference them from other files without
+  worrying they'll shift on renumber

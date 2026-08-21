@@ -33,6 +33,7 @@ local bidir = require("neorg-project-manager.bidir")
 local scaffold = require("neorg-project-manager.scaffold")
 local outcomes = require("neorg-project-manager.outcomes")
 local fields = require("neorg-project-manager.fields")
+local promote = require("neorg-project-manager.promote")
 
 --- Default configuration for the plugin.
 --- Users can override any of these in their lazy.nvim `opts` table.
@@ -46,15 +47,6 @@ M.defaults = {
     --- In addition to the manual `:NeorgPMRenumber` command.
     renumber_on_save = true,            -- Renumber on BufWritePre
     renumber_on_heading_leave = true,   -- Renumber when cursor leaves a modified heading line
-
-    --- Anchor root headings: when true, level-1 headings in files without a
-    --- prefix (standalone files, project.norg) preserve their existing numbers.
-    --- Children are numbered relative to the anchor. Un-numbered level-1 headings
-    --- get the next consecutive number after the previous anchor.
-    ---
-    --- Example: if you type "* 42. Project Alpha", children become 42.1, 42.2, etc.
-    --- The next un-numbered level-1 heading becomes "43. ..."
-    anchor_root_headings = true,
 
     ---------------------------------------------------------------------------
     --- NUMBERING FORMAT CONFIGURATION
@@ -94,20 +86,21 @@ M.defaults = {
     --- Custom format function (optional, overrides numbering_styles + number_separator).
     --- If provided, this function is called to generate the number string for each heading.
     ---
-    --- @type nil|fun(counters: number[], level: number): string
+    --- @type nil|fun(counters: number[], level: number, prefix: string|nil): string
     ---
     --- Parameters:
     ---   counters - Array of 6 integers, where counters[i] is the sequential count
     ---             for heading level i. e.g., {1, 2, 3, 0, 0, 0} means we're at
     ---             the 3rd heading3 under the 2nd heading2 under the 1st heading1.
     ---   level   - The current heading level (1-6).
+    ---   prefix  - The file prefix (e.g., "1.1.3") or nil for standalone files.
     ---
     --- Returns:
     ---   The formatted number string WITHOUT the title separator.
     ---   e.g., "1.2.3" or "I.B.iii" or "1-A-1"
     ---
     --- Example:
-    ---   number_format = function(counters, level)
+    ---   number_format = function(counters, level, prefix)
     ---       -- Custom: Roman numerals for level 1, letters for level 2, numbers for rest
     ---       local styles = {"roman_upper", "alpha_upper", "numeric", "numeric", "numeric", "numeric"}
     ---       local numbering = require("neorg-project-manager.numbering")
@@ -115,7 +108,9 @@ M.defaults = {
     ---       for i = 1, level do
     ---           parts[i] = numbering.format_counter(counters[i], styles[i])
     ---       end
-    ---       return table.concat(parts, ".")
+    ---       local num = table.concat(parts, ".")
+    ---       if prefix and prefix ~= "" then return prefix .. "." .. num end
+    ---       return num
     ---   end
     number_format = nil,
 
@@ -428,6 +423,12 @@ function M.setup(opts)
     vim.api.nvim_create_user_command("NeorgPMInit", function()
         scaffold.init()
     end, { desc = "Initialize a new project with a root status file" })
+
+    --- Promote list items under current heading to subsections.
+    vim.api.nvim_create_user_command("NeorgPMPromote", function()
+        local buf = vim.api.nvim_get_current_buf()
+        promote.promote(buf)
+    end, { desc = "Promote list items to subsections" })
 end
 
 --- Attach the plugin to a norg buffer.
@@ -488,6 +489,8 @@ function M.attach(buf)
             { buffer = buf, desc = "Browse items by owner" })
         vim.keymap.set("n", prefix .. "i", "<cmd>NeorgPMInit<CR>",
             { buffer = buf, desc = "Initialize project" })
+        vim.keymap.set("n", prefix .. "m", "<cmd>NeorgPMPromote<CR>",
+            { buffer = buf, desc = "Promote list items to subsections" })
     end
 
     -- Fire User event for extensibility
